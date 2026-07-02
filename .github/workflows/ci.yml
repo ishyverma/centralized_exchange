@@ -23,7 +23,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready -U backpack
+          --health-cmd "pg_isready -U backpack"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
@@ -33,7 +33,7 @@ jobs:
         ports:
           - 6379:6379
         options: >-
-          --health-cmd redis-cli ping
+          --health-cmd "redis-cli ping"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
