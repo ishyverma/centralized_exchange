@@ -1,5 +1,5 @@
-use actix_web::{web, App, test, middleware::Logger};
 use actix_cors::Cors;
+use actix_web::{middleware::Logger, test, web, App};
 use auth_service::config::Config;
 use auth_service::db::DbPool;
 use auth_service::middleware::JwtMiddleware;
@@ -7,8 +7,9 @@ use serde_json::json;
 
 macro_rules! setup_app {
     () => {{
-        let database_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://backpack:backpack_dev@localhost:5432/backpack_test".into());
+        let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgres://backpack:backpack_dev@localhost:5432/backpack_test".into()
+        });
         let db = DbPool::connect(&database_url).await.unwrap();
         let config = Config::from_env();
         let jwt_secret = config.jwt_secret.clone();
@@ -21,12 +22,27 @@ macro_rules! setup_app {
                 .service(
                     web::scope("/api/v3")
                         .wrap(JwtMiddleware::new(jwt_secret))
-                        .route("/auth/register", web::post().to(auth_service::handlers::auth::register))
-                        .route("/auth/login", web::post().to(auth_service::handlers::auth::login))
+                        .route(
+                            "/auth/register",
+                            web::post().to(auth_service::handlers::auth::register),
+                        )
+                        .route(
+                            "/auth/login",
+                            web::post().to(auth_service::handlers::auth::login),
+                        )
                         .route("/auth/me", web::get().to(auth_service::handlers::auth::me))
-                        .route("/auth/api-key", web::post().to(auth_service::handlers::api_keys::create_api_key))
-                        .route("/auth/api-key", web::get().to(auth_service::handlers::api_keys::list_api_keys))
-                        .route("/auth/api-key", web::delete().to(auth_service::handlers::api_keys::delete_api_key))
+                        .route(
+                            "/auth/api-key",
+                            web::post().to(auth_service::handlers::api_keys::create_api_key),
+                        )
+                        .route(
+                            "/auth/api-key",
+                            web::get().to(auth_service::handlers::api_keys::list_api_keys),
+                        )
+                        .route(
+                            "/auth/api-key",
+                            web::delete().to(auth_service::handlers::api_keys::delete_api_key),
+                        )
                         .route("/ping", web::get().to(auth_service::ping))
                         .route("/time", web::get().to(auth_service::server_time)),
                 ),

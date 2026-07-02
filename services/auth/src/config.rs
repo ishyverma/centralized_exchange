@@ -10,8 +10,9 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Self {
         Self {
-            database_url: std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://backpack:backpack_dev@localhost:5432/backpack".into()),
+            database_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+                "postgres://backpack:backpack_dev@localhost:5432/backpack".into()
+            }),
             jwt_secret: std::env::var("JWT_SECRET")
                 .unwrap_or_else(|_| "backpack-dev-jwt-secret-change-in-production".into()),
             jwt_expiration_secs: std::env::var("JWT_EXPIRATION_SECS")

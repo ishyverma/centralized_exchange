@@ -1,5 +1,5 @@
-use actix_web::{web, App, HttpServer, middleware::Logger};
 use actix_cors::Cors;
+use actix_web::{middleware::Logger, web, App, HttpServer};
 use auth_service::config::Config;
 use auth_service::db::DbPool;
 use auth_service::middleware::JwtMiddleware;
@@ -10,7 +10,9 @@ async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .init();
 
     let config = Config::from_env();
@@ -37,12 +39,27 @@ async fn main() -> anyhow::Result<()> {
             .service(
                 web::scope("/api/v3")
                     .wrap(JwtMiddleware::new(jwt_secret.clone()))
-                    .route("/auth/register", web::post().to(auth_service::handlers::auth::register))
-                    .route("/auth/login", web::post().to(auth_service::handlers::auth::login))
+                    .route(
+                        "/auth/register",
+                        web::post().to(auth_service::handlers::auth::register),
+                    )
+                    .route(
+                        "/auth/login",
+                        web::post().to(auth_service::handlers::auth::login),
+                    )
                     .route("/auth/me", web::get().to(auth_service::handlers::auth::me))
-                    .route("/auth/api-key", web::post().to(auth_service::handlers::api_keys::create_api_key))
-                    .route("/auth/api-key", web::get().to(auth_service::handlers::api_keys::list_api_keys))
-                    .route("/auth/api-key", web::delete().to(auth_service::handlers::api_keys::delete_api_key))
+                    .route(
+                        "/auth/api-key",
+                        web::post().to(auth_service::handlers::api_keys::create_api_key),
+                    )
+                    .route(
+                        "/auth/api-key",
+                        web::get().to(auth_service::handlers::api_keys::list_api_keys),
+                    )
+                    .route(
+                        "/auth/api-key",
+                        web::delete().to(auth_service::handlers::api_keys::delete_api_key),
+                    )
                     .route("/ping", web::get().to(auth_service::ping))
                     .route("/time", web::get().to(auth_service::server_time)),
             )

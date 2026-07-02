@@ -30,7 +30,9 @@ pub async fn register(
     let email = body.email.trim().to_lowercase();
 
     if !validator::validate_email(&email) {
-        return Err(AuthError(ApiError::ValidationError("Invalid email format".into())));
+        return Err(AuthError(ApiError::ValidationError(
+            "Invalid email format".into(),
+        )));
     }
     if body.password.len() < 8 {
         return Err(AuthError(ApiError::ValidationError(

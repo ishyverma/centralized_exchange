@@ -1,5 +1,5 @@
-use actix_web::{web, App, test, middleware::Logger};
 use actix_cors::Cors;
+use actix_web::{middleware::Logger, test, web, App};
 use api_gateway::middleware::jwt::JwtAuthMiddleware;
 use api_gateway::middleware::rate_limiter::RateLimiter;
 use serde_json::json;
@@ -18,7 +18,10 @@ macro_rules! setup_app {
                 .app_data(web::Data::new(auth_service_url))
                 .route("/api/v3/ping", web::get().to(api_gateway::ping))
                 .route("/api/v3/time", web::get().to(api_gateway::server_time))
-                .route("/api/v3/auth/{tail:.*}", web::route().to(api_gateway::proxy_to_auth))
+                .route(
+                    "/api/v3/auth/{tail:.*}",
+                    web::route().to(api_gateway::proxy_to_auth),
+                )
                 .default_service(web::route().to(api_gateway::not_found)),
         )
         .await
@@ -26,8 +29,8 @@ macro_rules! setup_app {
 }
 
 fn generate_jwt(secret: &str, sub: &str, email: &str, exp_offset: i64) -> String {
-    use jsonwebtoken::{encode, EncodingKey, Header};
     use api_gateway::middleware::jwt::Claims;
+    use jsonwebtoken::{encode, EncodingKey, Header};
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -39,7 +42,12 @@ fn generate_jwt(secret: &str, sub: &str, email: &str, exp_offset: i64) -> String
         exp: (now + exp_offset) as usize,
         iat: now as usize,
     };
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes())).unwrap()
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .unwrap()
 }
 
 #[actix_web::test]
@@ -63,19 +71,33 @@ async fn test_server_time() {
 #[actix_web::test]
 async fn test_public_routes_bypass_auth() {
     let app = setup_app!();
-    let routes = ["/api/v3/ping", "/api/v3/time", "/api/v3/exchangeInfo", "/api/v3/depth/BTCUSDT"];
+    let routes = [
+        "/api/v3/ping",
+        "/api/v3/time",
+        "/api/v3/exchangeInfo",
+        "/api/v3/depth/BTCUSDT",
+    ];
 
     for route in routes {
         let req = test::TestRequest::get().uri(route).to_request();
         let resp = test::call_service(&app, req).await;
-        assert!(resp.status() != 401, "Route {} should not return 401", route);
+        assert!(
+            resp.status() != 401,
+            "Route {} should not return 401",
+            route
+        );
     }
 }
 
 #[actix_web::test]
 async fn test_protected_route_rejects_without_auth() {
     let app = setup_app!();
-    let routes = ["/api/v3/order", "/api/v3/account", "/api/v3/myTrades", "/api/v3/balance"];
+    let routes = [
+        "/api/v3/order",
+        "/api/v3/account",
+        "/api/v3/myTrades",
+        "/api/v3/balance",
+    ];
 
     for route in routes {
         let req = test::TestRequest::get().uri(route).to_request();
@@ -87,7 +109,12 @@ async fn test_protected_route_rejects_without_auth() {
 #[actix_web::test]
 async fn test_protected_route_accepts_valid_jwt() {
     let app = setup_app!();
-    let token = generate_jwt(TEST_JWT_SECRET, "550e8400-e29b-41d4-a716-446655440000", "test@example.com", 3600);
+    let token = generate_jwt(
+        TEST_JWT_SECRET,
+        "550e8400-e29b-41d4-a716-446655440000",
+        "test@example.com",
+        3600,
+    );
 
     let req = test::TestRequest::get()
         .uri("/api/v3/order")
@@ -100,7 +127,12 @@ async fn test_protected_route_accepts_valid_jwt() {
 #[actix_web::test]
 async fn test_protected_route_rejects_expired_jwt() {
     let app = setup_app!();
-    let token = generate_jwt(TEST_JWT_SECRET, "550e8400-e29b-41d4-a716-446655440000", "test@example.com", -3600);
+    let token = generate_jwt(
+        TEST_JWT_SECRET,
+        "550e8400-e29b-41d4-a716-446655440000",
+        "test@example.com",
+        -3600,
+    );
 
     let req = test::TestRequest::get()
         .uri("/api/v3/order")
@@ -124,7 +156,9 @@ async fn test_protected_route_rejects_malformed_jwt() {
 #[actix_web::test]
 async fn test_not_found() {
     let app = setup_app!();
-    let req = test::TestRequest::get().uri("/api/v3/nonexistent").to_request();
+    let req = test::TestRequest::get()
+        .uri("/api/v3/nonexistent")
+        .to_request();
     let resp = test::call_service(&app, req).await;
     // JWT middleware rejects before reaching not_found handler for /api/v3 paths
     assert_eq!(resp.status(), 401);
@@ -133,7 +167,9 @@ async fn test_not_found() {
 #[actix_web::test]
 async fn test_proxy_returns_bad_gateway() {
     let app = setup_app!();
-    let req = test::TestRequest::get().uri("/api/v3/auth/register").to_request();
+    let req = test::TestRequest::get()
+        .uri("/api/v3/auth/register")
+        .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 502);
 }
@@ -141,7 +177,12 @@ async fn test_proxy_returns_bad_gateway() {
 #[actix_web::test]
 async fn test_proxy_forwards_auth_header() {
     let app = setup_app!();
-    let token = generate_jwt(TEST_JWT_SECRET, "550e8400-e29b-41d4-a716-446655440000", "test@example.com", 3600);
+    let token = generate_jwt(
+        TEST_JWT_SECRET,
+        "550e8400-e29b-41d4-a716-446655440000",
+        "test@example.com",
+        3600,
+    );
 
     let req = test::TestRequest::post()
         .uri("/api/v3/auth/api-key")

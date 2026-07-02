@@ -34,7 +34,12 @@ mod tests {
             exp: (now + exp_offset) as usize,
             iat: now as usize,
         };
-        encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes())).unwrap()
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret.as_bytes()),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -202,7 +207,9 @@ where
                 Err(_) => {
                     let (http_req, _) = req.into_parts();
                     let response = actix_web::HttpResponse::Unauthorized()
-                        .json(serde_json::json!({ "code": -1006, "msg": "Invalid or expired token" }))
+                        .json(
+                            serde_json::json!({ "code": -1006, "msg": "Invalid or expired token" }),
+                        )
                         .map_into_boxed_body();
                     let res = ServiceResponse::new(http_req, response);
                     return Box::pin(async move { Ok(res) });

@@ -86,32 +86,36 @@ where
             .map(|s| s.to_string());
 
         match token {
-            Some(token) => match decode::<Claims>(
-                &token,
-                &DecodingKey::from_secret(secret.as_bytes()),
-                &Validation::default(),
-            ) {
-                Ok(data) => {
-                    req.extensions_mut().insert(data.claims.sub);
-                    let fut = self.service.call(req);
-                    Box::pin(async move {
-                        let res = fut.await?;
-                        Ok(res)
-                    })
-                }
-                Err(_) => {
-                    let (http_req, _) = req.into_parts();
-                    let response = actix_web::HttpResponse::Unauthorized()
+            Some(token) => {
+                match decode::<Claims>(
+                    &token,
+                    &DecodingKey::from_secret(secret.as_bytes()),
+                    &Validation::default(),
+                ) {
+                    Ok(data) => {
+                        req.extensions_mut().insert(data.claims.sub);
+                        let fut = self.service.call(req);
+                        Box::pin(async move {
+                            let res = fut.await?;
+                            Ok(res)
+                        })
+                    }
+                    Err(_) => {
+                        let (http_req, _) = req.into_parts();
+                        let response = actix_web::HttpResponse::Unauthorized()
                         .json(serde_json::json!({ "code": -1006, "msg": "Invalid or expired token" }))
                         .map_into_boxed_body();
-                    let res = ServiceResponse::new(http_req, response);
-                    Box::pin(async move { Ok(res) })
+                        let res = ServiceResponse::new(http_req, response);
+                        Box::pin(async move { Ok(res) })
+                    }
                 }
-            },
+            }
             None => {
                 let (http_req, _) = req.into_parts();
                 let response = actix_web::HttpResponse::Unauthorized()
-                    .json(serde_json::json!({ "code": -1006, "msg": "Missing authorization header" }))
+                    .json(
+                        serde_json::json!({ "code": -1006, "msg": "Missing authorization header" }),
+                    )
                     .map_into_boxed_body();
                 let res = ServiceResponse::new(http_req, response);
                 Box::pin(async move { Ok(res) })

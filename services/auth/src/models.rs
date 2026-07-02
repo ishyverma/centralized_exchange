@@ -77,5 +77,3 @@ pub struct CreateApiKeyRequest {
 pub struct DeleteApiKeyRequest {
     pub api_key_id: Uuid,
 }
-
-
