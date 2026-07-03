@@ -49,8 +49,7 @@ spec:
               port: {{ .Values.orderService.port }}
             initialDelaySeconds: 5
             periodSeconds: 10
-          resources:
-{{ toYaml .Values.orderService.resources | indent 12 }}
+          resources: {{- toYaml .Values.orderService.resources | nindent 12 }}
 ---
 apiVersion: v1
 kind: Service

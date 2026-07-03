@@ -47,8 +47,7 @@ spec:
               port: {{ .Values.auth.port }}
             initialDelaySeconds: 5
             periodSeconds: 10
-          resources:
-{{ toYaml .Values.auth.resources | indent 12 }}
+          resources: {{- toYaml .Values.auth.resources | nindent 12 }}
 ---
 apiVersion: v1
 kind: Service
