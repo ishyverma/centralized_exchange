@@ -186,10 +186,23 @@ impl MatchingEngine {
                             final_status: "EXPIRED".to_string(),
                         };
                     }
+                    let placed_event = MatchingEvent::OrderPlaced {
+                        order_id: order.id,
+                        user_id: order.user_id,
+                        symbol: order.symbol.clone(),
+                        side: order.side.clone(),
+                        price: order.price.map(|p| p.to_string()).unwrap_or_default(),
+                        quantity: order.quantity.to_string(),
+                        order_type: order.order_type.clone(),
+                        time_in_force: order.time_in_force.clone(),
+                        client_order_id: order.client_order_id.clone(),
+                        timestamp: order.created_at,
+                    };
                     self.add_order_to_book(order);
+                    self.event_producer.publish(&placed_event);
                     return PlaceOrderOutput {
                         matches: Vec::new(),
-                        events: Vec::new(),
+                        events: vec![placed_event],
                         remaining_quantity: order.quantity,
                         filled_quantity: Decimal::ZERO,
                         final_status: "NEW".to_string(),
@@ -249,6 +262,12 @@ impl MatchingEngine {
 
         let is_ioc = order.time_in_force == "IOC";
         let is_fok = order.time_in_force == "FOK";
+
+        let book_snapshot = if is_fok {
+            self.order_books.get(&order.symbol).cloned()
+        } else {
+            None
+        };
 
         for level_price in maker_levels {
             if remaining <= Decimal::ZERO {
@@ -357,6 +376,9 @@ impl MatchingEngine {
 
         let filled_quantity = order.quantity - remaining;
         let final_status = if is_fok && remaining > Decimal::ZERO {
+            if let Some(snapshot) = book_snapshot {
+                self.order_books.insert(order.symbol.clone(), snapshot);
+            }
             matches.clear();
             events.clear();
             "EXPIRED".to_string()
@@ -364,6 +386,8 @@ impl MatchingEngine {
             "FILLED".to_string()
         } else if filled_quantity > Decimal::ZERO {
             "PARTIALLY_FILLED".to_string()
+        } else if is_market || is_ioc || is_fok {
+            "EXPIRED".to_string()
         } else {
             "NEW".to_string()
         };
@@ -391,6 +415,20 @@ impl MatchingEngine {
                     client_order_id: order.client_order_id.clone(),
                     created_at: order.created_at,
                 };
+                let placed_event = MatchingEvent::OrderPlaced {
+                    order_id: updated_order.id,
+                    user_id: updated_order.user_id,
+                    symbol: updated_order.symbol.clone(),
+                    side: updated_order.side.clone(),
+                    price: updated_order.price.map(|p| p.to_string()).unwrap_or_default(),
+                    quantity: updated_order.remaining_qty().to_string(),
+                    order_type: updated_order.order_type.clone(),
+                    time_in_force: updated_order.time_in_force.clone(),
+                    client_order_id: updated_order.client_order_id.clone(),
+                    timestamp: updated_order.created_at,
+                };
+                self.event_producer.publish(&placed_event);
+                events.push(placed_event);
                 self.add_order_to_book(&updated_order);
             }
         }
@@ -525,7 +563,7 @@ mod tests {
         let output = engine.place_order(&buy_order);
 
         assert_eq!(output.matches.len(), 0);
-        assert!(output.events.is_empty());
+        assert_eq!(output.events.len(), 1);
         assert_eq!(output.final_status, "NEW");
     }
 
@@ -702,7 +740,7 @@ mod tests {
 
         let output = engine.place_order(&ioc_order);
         assert_eq!(output.matches.len(), 0);
-        assert_eq!(output.final_status, "NEW");
+        assert_eq!(output.final_status, "EXPIRED");
         let state = engine.get_order_book_state("BTCUSDT").unwrap();
         assert_eq!(state.bids.len(), 0);
     }

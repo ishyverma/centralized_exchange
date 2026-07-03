@@ -33,18 +33,6 @@ pub enum MatchingEvent {
         reason: String,
         timestamp: u64,
     },
-    OrderBookSnapshot {
-        symbol: String,
-        bids: Vec<LevelEntry>,
-        asks: Vec<LevelEntry>,
-        sequence: u64,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LevelEntry {
-    pub price: String,
-    pub quantity: String,
 }
 
 pub const KAFKA_TOPIC_MATCHING_EVENTS: &str = "matching.events";

@@ -124,34 +124,6 @@ impl OrderBook {
         }
     }
 
-    pub fn update_filled(
-        &mut self,
-        order_id: Uuid,
-        side: &str,
-        price: Decimal,
-        filled_qty: Decimal,
-    ) {
-        let levels = match side.to_uppercase().as_str() {
-            "BUY" => &mut self.bids,
-            "SELL" => &mut self.asks,
-            _ => return,
-        };
-
-        if let Some(level) = levels.get_mut(&price) {
-            for order in &mut level.orders {
-                if order.order_id == order_id {
-                    order.filled_quantity += filled_qty;
-                    break;
-                }
-            }
-            level.orders.retain(|o| o.filled_quantity < o.quantity);
-            if level.orders.is_empty() {
-                levels.remove(&price);
-            }
-            self.sequence += 1;
-        }
-    }
-
     pub fn get_best_bid(&self) -> Option<(&Decimal, &PriceLevel)> {
         self.bids.iter().next_back()
     }
