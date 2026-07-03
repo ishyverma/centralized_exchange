@@ -47,7 +47,10 @@ async fn main() -> anyhow::Result<()> {
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db.clone()))
             .route("/api/v3/ping", web::get().to(market_data_service::ping))
-            .route("/api/v3/time", web::get().to(market_data_service::server_time))
+            .route(
+                "/api/v3/time",
+                web::get().to(market_data_service::server_time),
+            )
             .service(
                 web::scope("/api/v3")
                     .route(

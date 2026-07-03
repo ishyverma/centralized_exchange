@@ -104,9 +104,7 @@ where
         if exceeded {
             let resp = actix_web::HttpResponse::TooManyRequests()
                 .json(serde_json::json!({"code": -1015, "msg": "Too many requests"}));
-            return Box::pin(async move {
-                Ok(req.into_response(resp).map_into_boxed_body())
-            });
+            return Box::pin(async move { Ok(req.into_response(resp).map_into_boxed_body()) });
         }
 
         Box::pin(self.service.call(req))
