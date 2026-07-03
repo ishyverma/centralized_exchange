@@ -1,6 +1,7 @@
 ARG SERVICE
 
-FROM rust:1.81-slim-bookworm AS builder
+FROM rust:slim-bookworm AS builder
+ARG SERVICE
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY . .

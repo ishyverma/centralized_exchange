@@ -20,6 +20,7 @@ spec:
       containers:
         - name: gateway
           image: backpack/gateway:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               protocol: TCP

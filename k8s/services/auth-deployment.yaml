@@ -20,6 +20,7 @@ spec:
       containers:
         - name: auth-service
           image: backpack/auth-service:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               protocol: TCP

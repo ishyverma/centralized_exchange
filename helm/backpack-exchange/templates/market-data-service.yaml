@@ -20,6 +20,7 @@ spec:
       containers:
         - name: market-data-service
           image: {{ .Values.marketDataService.image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ .Values.marketDataService.port }}
           env:

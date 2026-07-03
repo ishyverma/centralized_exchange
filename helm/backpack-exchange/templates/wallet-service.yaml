@@ -20,6 +20,7 @@ spec:
       containers:
         - name: wallet-service
           image: {{ .Values.walletService.image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ .Values.walletService.port }}
           env:

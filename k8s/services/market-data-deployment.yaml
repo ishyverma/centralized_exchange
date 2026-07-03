@@ -20,6 +20,7 @@ spec:
       containers:
         - name: market-data-service
           image: backpack/market-data-service:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               protocol: TCP

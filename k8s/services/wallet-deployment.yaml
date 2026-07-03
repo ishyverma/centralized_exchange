@@ -20,6 +20,7 @@ spec:
       containers:
         - name: wallet-service
           image: backpack/wallet-service:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               protocol: TCP

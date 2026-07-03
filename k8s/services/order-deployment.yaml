@@ -20,6 +20,7 @@ spec:
       containers:
         - name: order-service
           image: backpack/order-service:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               protocol: TCP

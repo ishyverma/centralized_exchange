@@ -20,6 +20,7 @@ spec:
       containers:
         - name: order-service
           image: {{ .Values.orderService.image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ .Values.orderService.port }}
           env:
