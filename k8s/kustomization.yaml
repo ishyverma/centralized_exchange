@@ -3,8 +3,9 @@ kind: Kustomization
 
 namespace: backpack-exchange
 
-commonLabels:
-  app.kubernetes.io/part-of: backpack-exchange
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: backpack-exchange
 
 resources:
   - base/namespace.yaml
