@@ -3,6 +3,7 @@ pub struct Config {
     pub database_url: String,
     pub host: String,
     pub port: u16,
+    pub jwt_secret: String,
 }
 
 impl Config {
@@ -12,10 +13,12 @@ impl Config {
                 "postgres://backpack:backpack_dev@localhost:5432/backpack".into()
             }),
             host: std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into()),
-            port: std::env::var("WALLET_SERVICE_PORT")
+            port: std::env::var("PORT")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(8083),
+            jwt_secret: std::env::var("JWT_SECRET")
+                .unwrap_or_else(|_| "backpack-dev-jwt-secret-change-in-production".into()),
         }
     }
 }

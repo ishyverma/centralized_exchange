@@ -29,35 +29,6 @@ pub async fn exchange_info() -> HttpResponse {
     })
 }
 
-pub async fn get_depth(
-    db: web::Data<DbPool>,
-    query: web::Query<DepthQueryParams>,
-) -> Result<HttpResponse, MarketDataError> {
-    let symbol = query.symbol.to_uppercase();
-    let _limit = query.limit.unwrap_or(100).min(5000);
-
-    let trades = db.get_recent_trades(&symbol, 100).await?;
-
-    let mut bids: Vec<Vec<String>> = Vec::new();
-    let mut asks: Vec<Vec<String>> = Vec::new();
-
-    for trade in &trades {
-        let price_str = trade.price.to_string();
-        let qty_str = trade.quantity.to_string();
-        if trade.taker_side == "BUY" {
-            asks.push(vec![price_str, qty_str]);
-        } else {
-            bids.push(vec![price_str, qty_str]);
-        }
-    }
-
-    Ok(HttpResponse::Ok().json(DepthResponse {
-        last_update_id: 0,
-        bids,
-        asks,
-    }))
-}
-
 pub async fn get_recent_trades(
     db: web::Data<DbPool>,
     query: web::Query<TradesQueryParams>,

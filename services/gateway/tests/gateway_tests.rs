@@ -227,7 +227,7 @@ async fn test_proxy_forwards_auth_header() {
     );
 
     let req = test::TestRequest::post()
-        .uri("/api/v3/auth/api-key")
+        .uri("/api/v3/auth/api-keys")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(json!({ "permissions": ["READ"] }))
         .to_request();

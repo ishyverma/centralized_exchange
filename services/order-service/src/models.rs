@@ -108,17 +108,22 @@ impl From<super::db::OrderRow> for OrderResponse {
     }
 }
 
-impl From<super::db::TradeRow> for TradeResponse {
-    fn from(row: super::db::TradeRow) -> Self {
-        Self {
-            id: row.id,
-            symbol: row.symbol,
-            price: row.price.to_string(),
-            qty: row.quantity.to_string(),
-            quote_qty: row.quote_quantity.to_string(),
-            order_id: row.buyer_order_id,
-            is_buyer: true,
-            time: row.trade_time.timestamp_millis() as u64,
-        }
+pub fn trade_to_response(row: super::db::TradeRow, requesting_user_id: uuid::Uuid) -> TradeResponse {
+    let is_buyer = row.buyer_user_id == requesting_user_id;
+    let order_id = if is_buyer {
+        row.buyer_order_id
+    } else {
+        row.seller_order_id
+    };
+
+    TradeResponse {
+        id: row.id,
+        symbol: row.symbol,
+        price: row.price.to_string(),
+        qty: row.quantity.to_string(),
+        quote_qty: row.quote_quantity.to_string(),
+        order_id,
+        is_buyer,
+        time: row.trade_time.timestamp_millis() as u64,
     }
 }

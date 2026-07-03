@@ -102,10 +102,8 @@ pub async fn place_order(
         }
     }
 
-    if taker_total_filled > Decimal::ZERO {
-        db.update_order_status(order_row.id, &final_status, taker_total_filled)
-            .await?;
-    }
+    db.update_order_status(order_row.id, &final_status, taker_total_filled)
+        .await?;
 
     let latest = db.get_order(order_row.id, uid).await?.unwrap_or(order_row);
 
@@ -240,6 +238,9 @@ pub async fn my_trades(
         .list_user_trades(uid, query.symbol.as_deref(), limit, offset)
         .await?;
 
-    let response: Vec<TradeResponse> = trades.into_iter().map(TradeResponse::from).collect();
+    let response: Vec<TradeResponse> = trades
+        .into_iter()
+        .map(|t| crate::models::trade_to_response(t, uid))
+        .collect();
     Ok(HttpResponse::Ok().json(response))
 }

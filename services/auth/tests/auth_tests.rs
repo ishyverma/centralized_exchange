@@ -32,15 +32,15 @@ macro_rules! setup_app {
                         )
                         .route("/auth/me", web::get().to(auth_service::handlers::auth::me))
                         .route(
-                            "/auth/api-key",
+                            "/auth/api-keys",
                             web::post().to(auth_service::handlers::api_keys::create_api_key),
                         )
                         .route(
-                            "/auth/api-key",
+                            "/auth/api-keys",
                             web::get().to(auth_service::handlers::api_keys::list_api_keys),
                         )
                         .route(
-                            "/auth/api-key",
+                            "/auth/api-keys",
                             web::delete().to(auth_service::handlers::api_keys::delete_api_key),
                         )
                         .route("/ping", web::get().to(auth_service::ping))
@@ -217,7 +217,7 @@ async fn test_api_key_crud() {
     let email = format!("apikey_{}@example.com", uuid::Uuid::new_v4());
     let token = register_and_get_token!(app, &email);
     let req = test::TestRequest::post()
-        .uri("/api/v3/auth/api-key")
+        .uri("/api/v3/auth/api-keys")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(json!({ "permissions": ["READ", "TRADE"] }))
         .to_request();
@@ -227,7 +227,7 @@ async fn test_api_key_crud() {
     assert!(body["secret"].as_str().unwrap().len() > 10);
     let api_key = body["api_key"].as_str().unwrap().to_string();
     let req = test::TestRequest::get()
-        .uri("/api/v3/auth/api-key")
+        .uri("/api/v3/auth/api-keys")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -236,14 +236,14 @@ async fn test_api_key_crud() {
     assert_eq!(keys.len(), 1);
     assert_eq!(keys[0]["api_key"], api_key);
     let req = test::TestRequest::delete()
-        .uri("/api/v3/auth/api-key")
+        .uri("/api/v3/auth/api-keys")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(json!({ "api_key_id": keys[0]["id"] }))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 200);
     let req = test::TestRequest::get()
-        .uri("/api/v3/auth/api-key")
+        .uri("/api/v3/auth/api-keys")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -257,7 +257,7 @@ async fn test_api_key_invalid_permission() {
     let email = format!("invalid_perm_{}@example.com", uuid::Uuid::new_v4());
     let token = register_and_get_token!(app, &email);
     let req = test::TestRequest::post()
-        .uri("/api/v3/auth/api-key")
+        .uri("/api/v3/auth/api-keys")
         .insert_header(("Authorization", format!("Bearer {}", token)))
         .set_json(json!({ "permissions": ["INVALID"] }))
         .to_request();

@@ -10,3 +10,10 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 rust_decimal = { version = "1", features = ["serde"] }
 thiserror = "1"
+jsonwebtoken = { version = "9", optional = true }
+actix-web = { version = "4", optional = true }
+futures-util = { version = "0.3", optional = true }
+
+[features]
+default = []
+auth-middleware = ["jsonwebtoken", "actix-web", "futures-util"]

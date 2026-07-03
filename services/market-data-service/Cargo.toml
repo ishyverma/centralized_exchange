@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-backpack-common = { path = "../../common" }
+backpack-common = { path = "../../common", features = ["auth-middleware"] }
 matching-engine = { path = "../matching-engine" }
 actix-web = "4"
 actix-cors = "0.7"

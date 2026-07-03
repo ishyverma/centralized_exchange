@@ -49,15 +49,15 @@ async fn main() -> anyhow::Result<()> {
                     )
                     .route("/auth/me", web::get().to(auth_service::handlers::auth::me))
                     .route(
-                        "/auth/api-key",
+                        "/auth/api-keys",
                         web::post().to(auth_service::handlers::api_keys::create_api_key),
                     )
                     .route(
-                        "/auth/api-key",
+                        "/auth/api-keys",
                         web::get().to(auth_service::handlers::api_keys::list_api_keys),
                     )
                     .route(
-                        "/auth/api-key",
+                        "/auth/api-keys",
                         web::delete().to(auth_service::handlers::api_keys::delete_api_key),
                     )
                     .route("/ping", web::get().to(auth_service::ping))

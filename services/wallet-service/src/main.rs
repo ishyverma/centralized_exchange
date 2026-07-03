@@ -1,5 +1,5 @@
-use actix_cors::Cors;
-use actix_web::{middleware::Logger, web, App, HttpServer};
+use actix_web::{web, App, HttpServer};
+use backpack_common::auth::middleware::JwtAuthMiddleware;
 use tracing_subscriber::EnvFilter;
 use wallet_service::config::Config;
 use wallet_service::db::DbPool;
@@ -20,18 +20,13 @@ async fn main() -> anyhow::Result<()> {
     let host = config.host.clone();
     let port = config.port;
 
+    let jwt_secret = config.jwt_secret.clone();
+
     tracing::info!("Wallet Service starting on {}:{}", host, port);
 
     HttpServer::new(move || {
-        let cors = Cors::default()
-            .allow_any_origin()
-            .allow_any_method()
-            .allow_any_header()
-            .max_age(3600);
-
         App::new()
-            .wrap(Logger::default())
-            .wrap(cors)
+            .wrap(JwtAuthMiddleware::new(jwt_secret.clone(), Vec::new()))
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db.clone()))
             .service(
