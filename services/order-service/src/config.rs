@@ -4,6 +4,7 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub jwt_secret: String,
+    pub wallet_service_url: String,
 }
 
 impl Config {
@@ -19,6 +20,8 @@ impl Config {
                 .unwrap_or(8082),
             jwt_secret: std::env::var("JWT_SECRET")
                 .unwrap_or_else(|_| "backpack-dev-jwt-secret-change-in-production".into()),
+            wallet_service_url: std::env::var("WALLET_SERVICE_URL")
+                .unwrap_or_else(|_| "http://localhost:8083".into()),
         }
     }
 }

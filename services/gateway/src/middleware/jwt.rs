@@ -166,6 +166,7 @@ where
             "/api/v3/exchangeInfo",
             "/api/v3/depth",
             "/api/v3/trades",
+            "/api/v3/historicalTrades",
             "/api/v3/klines",
             "/api/v3/ticker",
             "/api/v3/auth/register",

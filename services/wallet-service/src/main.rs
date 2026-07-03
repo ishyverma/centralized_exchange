@@ -21,12 +21,19 @@ async fn main() -> anyhow::Result<()> {
     let port = config.port;
 
     let jwt_secret = config.jwt_secret.clone();
+    let public_prefixes = vec![
+        "/api/v3/balance/reserve".to_string(),
+        "/api/v3/balance/release".to_string(),
+    ];
 
     tracing::info!("Wallet Service starting on {}:{}", host, port);
 
     HttpServer::new(move || {
         App::new()
-            .wrap(JwtAuthMiddleware::new(jwt_secret.clone(), Vec::new()))
+            .wrap(JwtAuthMiddleware::new(
+                jwt_secret.clone(),
+                public_prefixes.clone(),
+            ))
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db.clone()))
             .service(
@@ -38,6 +45,14 @@ async fn main() -> anyhow::Result<()> {
                     .route(
                         "/balance",
                         web::get().to(wallet_service::handlers::wallet::get_balance),
+                    )
+                    .route(
+                        "/balance/reserve",
+                        web::post().to(wallet_service::handlers::wallet::reserve_balance),
+                    )
+                    .route(
+                        "/balance/release",
+                        web::post().to(wallet_service::handlers::wallet::release_balance),
                     ),
             )
     })

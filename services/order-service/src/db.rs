@@ -44,6 +44,7 @@ pub struct TradeRow {
 
 #[derive(Debug)]
 pub struct CreateOrderParams<'a> {
+    pub id: Option<Uuid>,
     pub user_id: Uuid,
     pub symbol: &'a str,
     pub side: &'a str,
@@ -67,21 +68,43 @@ impl DbPool {
         &self,
         params: CreateOrderParams<'_>,
     ) -> Result<OrderRow, sqlx::Error> {
-        sqlx::query_as::<_, OrderRow>(
-            r#"INSERT INTO orders (user_id, symbol, side, order_type, price, quantity, time_in_force, client_order_id, status)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'NEW')
-               RETURNING id, user_id, symbol, side, order_type, price, quantity, filled_quantity, status, time_in_force, client_order_id, created_at, updated_at, expires_at"#
-        )
-        .bind(params.user_id)
-        .bind(params.symbol)
-        .bind(params.side)
-        .bind(params.order_type)
-        .bind(params.price)
-        .bind(params.quantity)
-        .bind(params.time_in_force)
-        .bind(params.client_order_id)
-        .fetch_one(&self.pool)
-        .await
+        match params.id {
+            Some(order_id) => {
+                sqlx::query_as::<_, OrderRow>(
+                    r#"INSERT INTO orders (id, user_id, symbol, side, order_type, price, quantity, time_in_force, client_order_id, status)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'NEW')
+                       RETURNING id, user_id, symbol, side, order_type, price, quantity, filled_quantity, status, time_in_force, client_order_id, created_at, updated_at, expires_at"#
+                )
+                .bind(order_id)
+                .bind(params.user_id)
+                .bind(params.symbol)
+                .bind(params.side)
+                .bind(params.order_type)
+                .bind(params.price)
+                .bind(params.quantity)
+                .bind(params.time_in_force)
+                .bind(params.client_order_id)
+                .fetch_one(&self.pool)
+                .await
+            }
+            None => {
+                sqlx::query_as::<_, OrderRow>(
+                    r#"INSERT INTO orders (user_id, symbol, side, order_type, price, quantity, time_in_force, client_order_id, status)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'NEW')
+                       RETURNING id, user_id, symbol, side, order_type, price, quantity, filled_quantity, status, time_in_force, client_order_id, created_at, updated_at, expires_at"#
+                )
+                .bind(params.user_id)
+                .bind(params.symbol)
+                .bind(params.side)
+                .bind(params.order_type)
+                .bind(params.price)
+                .bind(params.quantity)
+                .bind(params.time_in_force)
+                .bind(params.client_order_id)
+                .fetch_one(&self.pool)
+                .await
+            }
+        }
     }
 
     pub async fn get_order(

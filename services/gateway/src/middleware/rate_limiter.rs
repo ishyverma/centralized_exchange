@@ -4,12 +4,15 @@ use actix_web::{
     Error,
 };
 use futures_util::future::LocalBoxFuture;
+use std::collections::HashMap;
 use std::future::{ready, Ready};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 struct RateLimitState {
-    _max_weight: u32,
-    _window_secs: u64,
+    max_weight: u32,
+    window_secs: u64,
+    counters: Mutex<HashMap<String, (u64, u32)>>,
 }
 
 pub struct RateLimiter {
@@ -25,8 +28,9 @@ impl RateLimiter {
     ) -> Self {
         Self {
             state: Arc::new(RateLimitState {
-                _max_weight: max_weight,
-                _window_secs: window_secs,
+                max_weight,
+                window_secs,
+                counters: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -46,14 +50,14 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(RateLimiterService {
             service,
-            _state: self.state.clone(),
+            state: self.state.clone(),
         }))
     }
 }
 
 pub struct RateLimiterService<S> {
     service: S,
-    _state: Arc<RateLimitState>,
+    state: Arc<RateLimitState>,
 }
 
 impl<S> Service<ServiceRequest> for RateLimiterService<S>
@@ -68,10 +72,43 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let fut = self.service.call(req);
-        Box::pin(async move {
-            let res = fut.await?;
-            Ok(res)
-        })
+        let state = self.state.clone();
+        let client_ip = req
+            .connection_info()
+            .realip_remote_addr()
+            .unwrap_or("unknown")
+            .to_string();
+        let path = req.path().to_string();
+        let key = format!("{}:{}", client_ip, path);
+
+        let exceeded = {
+            let mut counters = match state.counters.try_lock() {
+                Ok(c) => c,
+                Err(_) => {
+                    return Box::pin(self.service.call(req));
+                }
+            };
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let entry = counters.entry(key).or_insert((now, 0));
+            if now - entry.0 >= state.window_secs {
+                *entry = (now, 1);
+            } else {
+                entry.1 += 1;
+            }
+            entry.1 > state.max_weight
+        };
+
+        if exceeded {
+            let resp = actix_web::HttpResponse::TooManyRequests()
+                .json(serde_json::json!({"code": -1015, "msg": "Too many requests"}));
+            return Box::pin(async move {
+                Ok(req.into_response(resp).map_into_boxed_body())
+            });
+        }
+
+        Box::pin(self.service.call(req))
     }
 }

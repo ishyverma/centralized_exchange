@@ -18,6 +18,19 @@ pub struct BalanceRow {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+pub struct BalanceEventRow {
+    pub id: i64,
+    pub user_id: Uuid,
+    pub asset: String,
+    pub event_type: String,
+    pub amount: Decimal,
+    pub balance_before_total: Decimal,
+    pub balance_after_total: Decimal,
+    pub reference_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
+
 impl DbPool {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
         let pool = sqlx::postgres::PgPoolOptions::new()
@@ -55,20 +68,110 @@ impl DbPool {
         user_id: Uuid,
         asset: &str,
         amount: Decimal,
+        reference_id: Option<Uuid>,
     ) -> Result<(), sqlx::Error> {
-        let result = sqlx::query(
-            "UPDATE balances SET available = available - $1, reserved = reserved + $1, updated_at = NOW() WHERE user_id = $2 AND asset = $3 AND available >= $1",
+        let mut tx = self.pool.begin().await?;
+
+        let current: Option<(Decimal, Decimal, Decimal)> = sqlx::query_as(
+            "SELECT total, available, reserved FROM balances WHERE user_id = $1 AND asset = $2 FOR UPDATE",
+        )
+        .bind(user_id)
+        .bind(asset)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let (total, available, _reserved) = match current {
+            Some(v) => v,
+            None => {
+                tx.rollback().await?;
+                return Err(sqlx::Error::Protocol("Balance not found".to_string()));
+            }
+        };
+
+        if available < amount {
+            tx.rollback().await?;
+            return Err(sqlx::Error::Protocol("Insufficient balance".to_string()));
+        }
+
+        sqlx::query(
+            "UPDATE balances SET available = available - $1, reserved = reserved + $1, updated_at = NOW() WHERE user_id = $2 AND asset = $3",
         )
         .bind(amount)
         .bind(user_id)
         .bind(asset)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
-        if result.rows_affected() == 0 {
-            return Err(sqlx::Error::Protocol("Insufficient balance".to_string()));
+        sqlx::query(
+            "INSERT INTO balance_events (user_id, asset, event_type, amount, balance_before_total, balance_after_total, reference_id) VALUES ($1, $2, 'ORDER_RESERVE', $3, $4, $5, $6)",
+        )
+        .bind(user_id)
+        .bind(asset)
+        .bind(amount)
+        .bind(total)
+        .bind(total - amount)
+        .bind(reference_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn release_balance(
+        &self,
+        user_id: Uuid,
+        asset: &str,
+        amount: Decimal,
+        reference_id: Option<Uuid>,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        let current: Option<(Decimal, Decimal, Decimal)> = sqlx::query_as(
+            "SELECT total, available, reserved FROM balances WHERE user_id = $1 AND asset = $2 FOR UPDATE",
+        )
+        .bind(user_id)
+        .bind(asset)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let (total, _available, reserved) = match current {
+            Some(v) => v,
+            None => {
+                tx.rollback().await?;
+                return Err(sqlx::Error::Protocol("Balance not found".to_string()));
+            }
+        };
+
+        if reserved < amount {
+            tx.rollback().await?;
+            return Err(sqlx::Error::Protocol(
+                "Insufficient reserved balance".to_string(),
+            ));
         }
 
+        sqlx::query(
+            "UPDATE balances SET available = available + $1, reserved = reserved - $1, updated_at = NOW() WHERE user_id = $2 AND asset = $3",
+        )
+        .bind(amount)
+        .bind(user_id)
+        .bind(asset)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO balance_events (user_id, asset, event_type, amount, balance_before_total, balance_after_total, reference_id) VALUES ($1, $2, 'ORDER_RELEASE', $3, $4, $5, $6)",
+        )
+        .bind(user_id)
+        .bind(asset)
+        .bind(amount)
+        .bind(total)
+        .bind(total + amount)
+        .bind(reference_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(())
     }
 }

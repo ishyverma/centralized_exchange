@@ -1846,6 +1846,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "matching-engine",
+ "reqwest",
  "rust_decimal",
  "serde",
  "serde_json",

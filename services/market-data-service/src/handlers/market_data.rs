@@ -14,6 +14,20 @@ pub async fn exchange_info() -> HttpResponse {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64,
+        rate_limits: vec![
+            RateLimitInfo {
+                rate_limit_type: "REQUEST_WEIGHT".to_string(),
+                interval: "MINUTE".to_string(),
+                interval_num: 1,
+                limit: 6000,
+            },
+            RateLimitInfo {
+                rate_limit_type: "ORDERS".to_string(),
+                interval: "SECOND".to_string(),
+                interval_num: 10,
+                limit: 50,
+            },
+        ],
         symbols: vec![SymbolInfo {
             symbol: "BTCUSDT".to_string(),
             status: "TRADING".to_string(),
@@ -36,7 +50,8 @@ pub async fn get_recent_trades(
     let symbol = query.symbol.to_uppercase();
     let limit = query.limit.unwrap_or(500).min(1000);
 
-    let trades = db.get_recent_trades(&symbol, limit).await?;
+    let mut trades = db.get_recent_trades(&symbol, limit).await?;
+    trades.reverse();
     let response: Vec<TradeResponse> = trades.into_iter().map(TradeResponse::from).collect();
 
     Ok(HttpResponse::Ok().json(response))
@@ -160,8 +175,8 @@ pub async fn get_klines(
                 serde_json::json!(close_time),
                 serde_json::json!(k.quote_volume.to_string()),
                 serde_json::json!(k.trade_count),
-                serde_json::json!(k.volume.to_string()),
-                serde_json::json!(k.quote_volume.to_string()),
+                serde_json::json!("0"),
+                serde_json::json!("0"),
                 serde_json::json!("0"),
             ]
         })

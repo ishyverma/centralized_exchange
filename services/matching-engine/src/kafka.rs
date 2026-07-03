@@ -41,10 +41,13 @@ impl EventProducer {
         }
     }
 
-    fn try_publish_kafka(&self, _hosts: &str, _payload: &str) -> Result<(), String> {
-        Err(
-            "Kafka publishing not yet implemented - use Kafka broker deployment for production"
-                .to_string(),
-        )
+    fn try_publish_kafka(&self, hosts: &str, payload: &str) -> Result<(), String> {
+        tracing::debug!(hosts = %hosts, payload = %payload, "Kafka event (would publish)");
+        tracing::info!(
+            hosts = %hosts,
+            payload_len = %payload.len(),
+            "Kafka publishing attempted - add rdkafka dependency for production"
+        );
+        Err("Kafka not yet connected - install rdkafka crate for production use".to_string())
     }
 }

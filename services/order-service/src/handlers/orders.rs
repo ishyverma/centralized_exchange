@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse};
 use rust_decimal::Decimal;
+use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::db::DbPool;
@@ -8,9 +9,64 @@ use crate::error::OrderError;
 use crate::models::*;
 use backpack_common::error::ApiError;
 
+#[allow(clippy::too_many_arguments)]
+async fn reserve_order_balance(
+    wallet_url: &str,
+    user_id: Uuid,
+    symbol: &str,
+    side: &str,
+    order_type: &str,
+    price: Option<Decimal>,
+    quantity: Decimal,
+    order_id: Uuid,
+) -> Result<(), OrderError> {
+    let (asset, amount) = if side == "SELL" {
+        let base = symbol.trim_end_matches("USDT").trim_end_matches("BTC");
+        (base.to_string(), quantity.to_string())
+    } else {
+        let quote = "USDT";
+        let est_price = price.unwrap_or_else(|| {
+            if order_type == "MARKET" {
+                Decimal::from_str("100000").unwrap()
+            } else {
+                Decimal::ZERO
+            }
+        });
+        let cost = if est_price > Decimal::ZERO {
+            quantity * est_price
+        } else {
+            quantity * Decimal::from_str("100000").unwrap()
+        };
+        (quote.to_string(), cost.to_string())
+    };
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/api/v3/balance/reserve", wallet_url))
+        .json(&serde_json::json!({
+            "user_id": user_id,
+            "asset": asset,
+            "amount": amount,
+            "reference_id": order_id,
+        }))
+        .send()
+        .await
+        .map_err(|e| OrderError(ApiError::Internal(format!("Wallet service error: {}", e))))?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(OrderError(ApiError::ValidationError(format!(
+            "Balance check failed: {}",
+            body
+        ))));
+    }
+    Ok(())
+}
+
 pub async fn place_order(
     db: web::Data<DbPool>,
     engine: web::Data<EngineClient>,
+    config: web::Data<crate::config::Config>,
     user_id: web::ReqData<Uuid>,
     body: web::Json<PlaceOrderRequest>,
 ) -> Result<HttpResponse, OrderError> {
@@ -58,8 +114,22 @@ pub async fn place_order(
 
     let client_order_id = body.new_client_order_id.as_deref();
 
+    let order_id = Uuid::new_v4();
+    reserve_order_balance(
+        &config.wallet_service_url,
+        uid,
+        &symbol,
+        &side,
+        &order_type,
+        body.price,
+        body.quantity,
+        order_id,
+    )
+    .await?;
+
     let order_row = db
         .create_order(crate::db::CreateOrderParams {
+            id: Some(order_id),
             user_id: uid,
             symbol: &symbol,
             side: &side,
@@ -196,6 +266,7 @@ pub async fn get_depth(
     query: web::Query<DepthParams>,
 ) -> Result<HttpResponse, OrderError> {
     let symbol = query.symbol.to_uppercase();
+    let limit = query.limit.unwrap_or(100).min(5000) as usize;
 
     let state = engine.get_depth(&symbol);
     match state {
@@ -203,11 +274,13 @@ pub async fn get_depth(
             let bids: Vec<Vec<String>> = book_state
                 .bids
                 .iter()
+                .take(limit)
                 .map(|l| vec![l.price.to_string(), l.quantity.to_string()])
                 .collect();
             let asks: Vec<Vec<String>> = book_state
                 .asks
                 .iter()
+                .take(limit)
                 .map(|l| vec![l.price.to_string(), l.quantity.to_string()])
                 .collect();
 
@@ -229,23 +302,30 @@ pub async fn get_book_ticker(
     engine: web::Data<EngineClient>,
     query: web::Query<BookTickerQueryParams>,
 ) -> Result<HttpResponse, OrderError> {
-    let symbol = query.symbol.as_deref().unwrap_or("BTCUSDT").to_uppercase();
-    let ticker = engine.get_book_ticker(&symbol);
-    match ticker {
-        Some(t) => Ok(HttpResponse::Ok().json(BookTickerResponse {
-            symbol: t.symbol,
-            bid_price: t.bid_price.to_string(),
-            bid_qty: t.bid_qty.to_string(),
-            ask_price: t.ask_price.to_string(),
-            ask_qty: t.ask_qty.to_string(),
-        })),
-        None => Ok(HttpResponse::Ok().json(BookTickerResponse {
-            symbol,
-            bid_price: "0".to_string(),
-            bid_qty: "0".to_string(),
-            ask_price: "0".to_string(),
-            ask_qty: "0".to_string(),
-        })),
+    match &query.symbol {
+        Some(s) => {
+            let symbol = s.to_uppercase();
+            let ticker = engine.get_book_ticker(&symbol);
+            match ticker {
+                Some(t) => Ok(HttpResponse::Ok().json(BookTickerResponse {
+                    symbol: t.symbol,
+                    bid_price: t.bid_price.to_string(),
+                    bid_qty: t.bid_qty.to_string(),
+                    ask_price: t.ask_price.to_string(),
+                    ask_qty: t.ask_qty.to_string(),
+                })),
+                None => Ok(HttpResponse::Ok().json(BookTickerResponse {
+                    symbol,
+                    bid_price: "0".to_string(),
+                    bid_qty: "0".to_string(),
+                    ask_price: "0".to_string(),
+                    ask_qty: "0".to_string(),
+                })),
+            }
+        }
+        None => Err(OrderError(ApiError::ValidationError(
+            "symbol is required".into(),
+        ))),
     }
 }
 

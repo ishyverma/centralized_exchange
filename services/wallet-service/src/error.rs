@@ -36,6 +36,15 @@ impl ResponseError for WalletError {
 
 impl From<sqlx::Error> for WalletError {
     fn from(e: sqlx::Error) -> Self {
-        WalletError(ApiError::Internal(format!("Database error: {}", e)))
+        match &e {
+            sqlx::Error::Protocol(msg) => {
+                if msg == "Insufficient balance" || msg == "Insufficient reserved balance" {
+                    WalletError(ApiError::InsufficientBalance)
+                } else {
+                    WalletError(ApiError::Internal(format!("Database error: {}", e)))
+                }
+            }
+            _ => WalletError(ApiError::Internal(format!("Database error: {}", e))),
+        }
     }
 }

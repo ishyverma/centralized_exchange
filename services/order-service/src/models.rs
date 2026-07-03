@@ -97,8 +97,11 @@ pub struct TradeResponse {
     pub price: String,
     pub qty: String,
     pub quote_qty: String,
+    pub commission: String,
+    pub commission_asset: String,
     pub order_id: Uuid,
     pub is_buyer: bool,
+    pub is_maker: bool,
     pub time: u64,
 }
 
@@ -127,20 +130,29 @@ pub fn trade_to_response(
     requesting_user_id: uuid::Uuid,
 ) -> TradeResponse {
     let is_buyer = row.buyer_user_id == requesting_user_id;
+    let is_maker = if is_buyer {
+        row.taker_side != "BUY"
+    } else {
+        row.taker_side != "SELL"
+    };
     let order_id = if is_buyer {
         row.buyer_order_id
     } else {
         row.seller_order_id
     };
 
+    let commission_asset = row.symbol.trim_end_matches("USDT").to_string();
     TradeResponse {
         id: row.id,
         symbol: row.symbol,
         price: row.price.to_string(),
         qty: row.quantity.to_string(),
         quote_qty: row.quote_quantity.to_string(),
+        commission: "0".to_string(),
+        commission_asset,
         order_id,
         is_buyer,
+        is_maker,
         time: row.trade_time.timestamp_millis() as u64,
     }
 }

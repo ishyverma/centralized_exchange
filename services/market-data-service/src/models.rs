@@ -73,7 +73,20 @@ pub struct TickerPriceResponse {
 pub struct ExchangeInfoResponse {
     pub timezone: String,
     pub server_time: u64,
+    pub rate_limits: Vec<RateLimitInfo>,
     pub symbols: Vec<SymbolInfo>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RateLimitInfo {
+    #[serde(rename = "rateLimitType")]
+    pub rate_limit_type: String,
+    #[serde(rename = "interval")]
+    pub interval: String,
+    #[serde(rename = "intervalNum")]
+    pub interval_num: u32,
+    #[serde(rename = "limit")]
+    pub limit: u32,
 }
 
 #[derive(Debug, Serialize)]
