@@ -35,7 +35,11 @@ pub mod middleware {
 
     impl<S> Transform<S, ServiceRequest> for JwtAuthMiddleware
     where
-        S: Service<ServiceRequest, Response = ServiceResponse<actix_web::body::BoxBody>, Error = Error>,
+        S: Service<
+            ServiceRequest,
+            Response = ServiceResponse<actix_web::body::BoxBody>,
+            Error = Error,
+        >,
         S::Future: 'static,
     {
         type Response = ServiceResponse<actix_web::body::BoxBody>;
@@ -61,7 +65,11 @@ pub mod middleware {
 
     impl<S> Service<ServiceRequest> for JwtAuthMiddlewareService<S>
     where
-        S: Service<ServiceRequest, Response = ServiceResponse<actix_web::body::BoxBody>, Error = Error>,
+        S: Service<
+            ServiceRequest,
+            Response = ServiceResponse<actix_web::body::BoxBody>,
+            Error = Error,
+        >,
         S::Future: 'static,
     {
         type Response = ServiceResponse<BoxBody>;

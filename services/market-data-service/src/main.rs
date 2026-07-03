@@ -16,9 +16,8 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::from_env();
     let db = DbPool::connect(
-        &std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-            "postgres://backpack:backpack_dev@localhost:5432/backpack".into()
-        }),
+        &std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://backpack:backpack_dev@localhost:5432/backpack".into()),
     )
     .await?;
 
@@ -51,21 +50,16 @@ async fn main() -> anyhow::Result<()> {
                     )
                     .route(
                         "/trades",
-                        web::get().to(
-                            market_data_service::handlers::market_data::get_recent_trades,
-                        ),
+                        web::get()
+                            .to(market_data_service::handlers::market_data::get_recent_trades),
                     )
                     .route(
                         "/ticker/24hr",
-                        web::get().to(
-                            market_data_service::handlers::market_data::get_ticker_24hr,
-                        ),
+                        web::get().to(market_data_service::handlers::market_data::get_ticker_24hr),
                     )
                     .route(
                         "/ticker/price",
-                        web::get().to(
-                            market_data_service::handlers::market_data::get_ticker_price,
-                        ),
+                        web::get().to(market_data_service::handlers::market_data::get_ticker_price),
                     ),
             )
     })

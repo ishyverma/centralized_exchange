@@ -132,10 +132,7 @@ impl EngineClient {
         }
     }
 
-    pub fn get_depth(
-        &self,
-        symbol: &str,
-    ) -> Option<matching_engine::engine::OrderBookState> {
+    pub fn get_depth(&self, symbol: &str) -> Option<matching_engine::engine::OrderBookState> {
         if let Ok(engine) = self.engine.lock() {
             return engine.get_order_book_state(symbol);
         }

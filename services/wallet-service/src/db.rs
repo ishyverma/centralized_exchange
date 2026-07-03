@@ -41,10 +41,7 @@ impl DbPool {
         .await
     }
 
-    pub async fn list_balances(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Vec<BalanceRow>, sqlx::Error> {
+    pub async fn list_balances(&self, user_id: Uuid) -> Result<Vec<BalanceRow>, sqlx::Error> {
         sqlx::query_as::<_, BalanceRow>(
             "SELECT user_id, asset, total, available, reserved, updated_at FROM balances WHERE user_id = $1 ORDER BY asset",
         )

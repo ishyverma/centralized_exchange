@@ -130,25 +130,29 @@ impl MatchingEngine {
             let levels_map = match maker_side {
                 "SELL" => &book.asks,
                 "BUY" => &book.bids,
-                _ => return PlaceOrderOutput {
-                    matches: Vec::new(),
-                    events: Vec::new(),
-                    remaining_quantity: order.quantity,
-                    filled_quantity: Decimal::ZERO,
-                    final_status: "EXPIRED".to_string(),
-                },
+                _ => {
+                    return PlaceOrderOutput {
+                        matches: Vec::new(),
+                        events: Vec::new(),
+                        remaining_quantity: order.quantity,
+                        filled_quantity: Decimal::ZERO,
+                        final_status: "EXPIRED".to_string(),
+                    }
+                }
             };
 
             match taker_side.as_str() {
                 "BUY" => levels_map.keys().copied().collect(),
                 "SELL" => levels_map.keys().rev().copied().collect(),
-                _ => return PlaceOrderOutput {
-                    matches: Vec::new(),
-                    events: Vec::new(),
-                    remaining_quantity: order.quantity,
-                    filled_quantity: Decimal::ZERO,
-                    final_status: "EXPIRED".to_string(),
-                },
+                _ => {
+                    return PlaceOrderOutput {
+                        matches: Vec::new(),
+                        events: Vec::new(),
+                        remaining_quantity: order.quantity,
+                        filled_quantity: Decimal::ZERO,
+                        final_status: "EXPIRED".to_string(),
+                    }
+                }
             }
         };
 
@@ -176,7 +180,8 @@ impl MatchingEngine {
             let book = match self.order_books.get(&order.symbol) {
                 Some(b) => b,
                 None => {
-                    let is_ioc_or_fok = order.time_in_force == "IOC" || order.time_in_force == "FOK";
+                    let is_ioc_or_fok =
+                        order.time_in_force == "IOC" || order.time_in_force == "FOK";
                     if is_ioc_or_fok {
                         return PlaceOrderOutput {
                             matches: Vec::new(),
@@ -213,13 +218,15 @@ impl MatchingEngine {
             let levels_map = match maker_side {
                 "SELL" => &book.asks,
                 "BUY" => &book.bids,
-                _ => return PlaceOrderOutput {
-                    matches: Vec::new(),
-                    events: Vec::new(),
-                    remaining_quantity: order.quantity,
-                    filled_quantity: Decimal::ZERO,
-                    final_status: "NEW".to_string(),
-                },
+                _ => {
+                    return PlaceOrderOutput {
+                        matches: Vec::new(),
+                        events: Vec::new(),
+                        remaining_quantity: order.quantity,
+                        filled_quantity: Decimal::ZERO,
+                        final_status: "NEW".to_string(),
+                    }
+                }
             };
 
             match taker_side.as_str() {
@@ -234,13 +241,15 @@ impl MatchingEngine {
                     .take_while(|p| **p >= taker_price)
                     .copied()
                     .collect(),
-                _ => return PlaceOrderOutput {
-                    matches: Vec::new(),
-                    events: Vec::new(),
-                    remaining_quantity: order.quantity,
-                    filled_quantity: Decimal::ZERO,
-                    final_status: "NEW".to_string(),
-                },
+                _ => {
+                    return PlaceOrderOutput {
+                        matches: Vec::new(),
+                        events: Vec::new(),
+                        remaining_quantity: order.quantity,
+                        filled_quantity: Decimal::ZERO,
+                        final_status: "NEW".to_string(),
+                    }
+                }
             }
         };
 
@@ -420,7 +429,10 @@ impl MatchingEngine {
                     user_id: updated_order.user_id,
                     symbol: updated_order.symbol.clone(),
                     side: updated_order.side.clone(),
-                    price: updated_order.price.map(|p| p.to_string()).unwrap_or_default(),
+                    price: updated_order
+                        .price
+                        .map(|p| p.to_string())
+                        .unwrap_or_default(),
                     quantity: updated_order.remaining_qty().to_string(),
                     order_type: updated_order.order_type.clone(),
                     time_in_force: updated_order.time_in_force.clone(),
@@ -580,7 +592,10 @@ mod tests {
         let output = engine.place_order(&buy_order);
 
         assert_eq!(output.matches.len(), 1);
-        assert_eq!(output.matches[0].quantity, Decimal::from_str("0.5").unwrap());
+        assert_eq!(
+            output.matches[0].quantity,
+            Decimal::from_str("0.5").unwrap()
+        );
         assert_eq!(output.final_status, "PARTIALLY_FILLED");
 
         let state = engine.get_order_book_state("BTCUSDT").unwrap();

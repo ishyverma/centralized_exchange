@@ -49,9 +49,7 @@ pub async fn get_ticker_24hr(
     let symbol = query
         .symbol
         .as_deref()
-        .ok_or_else(|| {
-            MarketDataError(ApiError::ValidationError("symbol is required".into()))
-        })?
+        .ok_or_else(|| MarketDataError(ApiError::ValidationError("symbol is required".into())))?
         .to_uppercase();
 
     let trades = db.get_trades_24hr(&symbol).await?;
@@ -118,7 +116,9 @@ pub async fn get_ticker_price(
             let price = db.get_last_price(&sym).await?;
             Ok(HttpResponse::Ok().json(TickerPriceResponse {
                 symbol: sym,
-                price: price.map(|p| p.to_string()).unwrap_or_else(|| "0".to_string()),
+                price: price
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "0".to_string()),
             }))
         }
         None => Err(MarketDataError(ApiError::ValidationError(

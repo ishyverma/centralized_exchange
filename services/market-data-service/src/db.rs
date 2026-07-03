@@ -56,10 +56,7 @@ impl DbPool {
         .await
     }
 
-    pub async fn get_trades_24hr(
-        &self,
-        symbol: &str,
-    ) -> Result<Vec<TradeRow>, sqlx::Error> {
+    pub async fn get_trades_24hr(&self, symbol: &str) -> Result<Vec<TradeRow>, sqlx::Error> {
         sqlx::query_as::<_, TradeRow>(
             "SELECT id, symbol, price, quantity, quote_quantity, buyer_order_id, seller_order_id, taker_side, trade_time FROM trades WHERE symbol = $1 AND trade_time > NOW() - INTERVAL '24 hours' ORDER BY trade_time ASC",
         )
@@ -68,10 +65,7 @@ impl DbPool {
         .await
     }
 
-    pub async fn get_last_price(
-        &self,
-        symbol: &str,
-    ) -> Result<Option<Decimal>, sqlx::Error> {
+    pub async fn get_last_price(&self, symbol: &str) -> Result<Option<Decimal>, sqlx::Error> {
         let row: Option<(Decimal,)> = sqlx::query_as(
             "SELECT price FROM trades WHERE symbol = $1 ORDER BY trade_time DESC LIMIT 1",
         )

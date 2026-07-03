@@ -108,7 +108,10 @@ impl From<super::db::OrderRow> for OrderResponse {
     }
 }
 
-pub fn trade_to_response(row: super::db::TradeRow, requesting_user_id: uuid::Uuid) -> TradeResponse {
+pub fn trade_to_response(
+    row: super::db::TradeRow,
+    requesting_user_id: uuid::Uuid,
+) -> TradeResponse {
     let is_buyer = row.buyer_user_id == requesting_user_id;
     let order_id = if is_buyer {
         row.buyer_order_id
