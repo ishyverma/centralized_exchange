@@ -6,6 +6,8 @@ pub struct Config {
     pub redis_url: String,
     pub auth_service_url: String,
     pub order_service_url: String,
+    pub wallet_service_url: String,
+    pub market_data_service_url: String,
     pub rate_limit_weight_window: u64,
     pub rate_limit_max_weight: u32,
     pub order_rate_limit_per_sec: u32,
@@ -27,6 +29,10 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:8081".into()),
             order_service_url: std::env::var("ORDER_SERVICE_URL")
                 .unwrap_or_else(|_| "http://localhost:8082".into()),
+            wallet_service_url: std::env::var("WALLET_SERVICE_URL")
+                .unwrap_or_else(|_| "http://localhost:8083".into()),
+            market_data_service_url: std::env::var("MARKET_DATA_SERVICE_URL")
+                .unwrap_or_else(|_| "http://localhost:8084".into()),
             rate_limit_weight_window: 60,
             rate_limit_max_weight: 6000,
             order_rate_limit_per_sec: 10,

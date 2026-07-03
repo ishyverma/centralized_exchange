@@ -50,7 +50,7 @@ impl EngineClient {
     pub async fn process_order(
         &self,
         order_row: &crate::db::OrderRow,
-    ) -> Result<Vec<MatchSummary>, String> {
+    ) -> Result<(Vec<MatchSummary>, String), String> {
         let order = Order {
             id: order_row.id,
             user_id: order_row.user_id,
@@ -67,13 +67,13 @@ impl EngineClient {
         };
 
         let mut engine = self.engine.lock().map_err(|e| e.to_string())?;
-        let (matches, _events) = engine.place_limit_order(&order);
+        let output = engine.place_order(&order);
 
         let mut summaries = Vec::new();
 
         if order_row.side.to_uppercase() == "BUY" {
             let mut total_filled = Decimal::ZERO;
-            for m in &matches {
+            for m in &output.matches {
                 total_filled += m.quantity;
                 let quote_qty = m.price * m.quantity;
                 summaries.push(MatchSummary {
@@ -98,7 +98,7 @@ impl EngineClient {
             }
         } else {
             let mut total_filled = Decimal::ZERO;
-            for m in &matches {
+            for m in &output.matches {
                 total_filled += m.quantity;
                 let quote_qty = m.price * m.quantity;
                 summaries.push(MatchSummary {
@@ -123,12 +123,22 @@ impl EngineClient {
             }
         }
 
-        Ok(summaries)
+        Ok((summaries, output.final_status.clone()))
     }
 
     pub async fn cancel_order(&self, order_id: Uuid, symbol: &str, side: &str, price: Decimal) {
         if let Ok(mut engine) = self.engine.lock() {
             engine.cancel_order(order_id, symbol, side, price);
         }
+    }
+
+    pub fn get_depth(
+        &self,
+        symbol: &str,
+    ) -> Option<matching_engine::engine::OrderBookState> {
+        if let Ok(engine) = self.engine.lock() {
+            return engine.get_order_book_state(symbol);
+        }
+        None
     }
 }

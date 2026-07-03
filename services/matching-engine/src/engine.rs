@@ -30,6 +30,15 @@ pub struct LevelSnapshot {
 }
 
 #[derive(Debug)]
+pub struct PlaceOrderOutput {
+    pub matches: Vec<MatchResult>,
+    pub events: Vec<MatchingEvent>,
+    pub remaining_quantity: Decimal,
+    pub filled_quantity: Decimal,
+    pub final_status: String,
+}
+
+#[derive(Debug)]
 pub struct MatchingEngine {
     pub order_books: HashMap<String, OrderBook>,
     match_counter: u64,
@@ -92,31 +101,112 @@ impl MatchingEngine {
         })
     }
 
-    pub fn place_limit_order(&mut self, order: &Order) -> (Vec<MatchResult>, Vec<MatchingEvent>) {
-        let mut matches = Vec::new();
-        let mut events = Vec::new();
+    pub fn place_order(&mut self, order: &Order) -> PlaceOrderOutput {
+        let order_type = order.order_type.to_uppercase();
+        match order_type.as_str() {
+            "MARKET" => self.place_market_order(order),
+            _ => self.place_limit_order(order),
+        }
+    }
 
+    fn place_market_order(&mut self, order: &Order) -> PlaceOrderOutput {
         let taker_side = order.side.to_uppercase();
         let maker_side = if taker_side == "BUY" { "SELL" } else { "BUY" };
-
-        let taker_price = match order.price {
-            Some(p) => p,
-            None => return (matches, events),
-        };
 
         let maker_levels: Vec<Decimal> = {
             let book = match self.order_books.get(&order.symbol) {
                 Some(b) => b,
                 None => {
-                    self.add_order_to_book(order);
-                    return (matches, events);
+                    return PlaceOrderOutput {
+                        matches: Vec::new(),
+                        events: Vec::new(),
+                        remaining_quantity: order.quantity,
+                        filled_quantity: Decimal::ZERO,
+                        final_status: "EXPIRED".to_string(),
+                    };
                 }
             };
 
             let levels_map = match maker_side {
                 "SELL" => &book.asks,
                 "BUY" => &book.bids,
-                _ => return (matches, events),
+                _ => return PlaceOrderOutput {
+                    matches: Vec::new(),
+                    events: Vec::new(),
+                    remaining_quantity: order.quantity,
+                    filled_quantity: Decimal::ZERO,
+                    final_status: "EXPIRED".to_string(),
+                },
+            };
+
+            match taker_side.as_str() {
+                "BUY" => levels_map.keys().copied().collect(),
+                "SELL" => levels_map.keys().rev().copied().collect(),
+                _ => return PlaceOrderOutput {
+                    matches: Vec::new(),
+                    events: Vec::new(),
+                    remaining_quantity: order.quantity,
+                    filled_quantity: Decimal::ZERO,
+                    final_status: "EXPIRED".to_string(),
+                },
+            }
+        };
+
+        self.execute_matches(order, &maker_levels, &taker_side, maker_side, true)
+    }
+
+    fn place_limit_order(&mut self, order: &Order) -> PlaceOrderOutput {
+        let taker_side = order.side.to_uppercase();
+        let maker_side = if taker_side == "BUY" { "SELL" } else { "BUY" };
+
+        let taker_price = match order.price {
+            Some(p) => p,
+            None => {
+                return PlaceOrderOutput {
+                    matches: Vec::new(),
+                    events: Vec::new(),
+                    remaining_quantity: order.quantity,
+                    filled_quantity: Decimal::ZERO,
+                    final_status: "NEW".to_string(),
+                };
+            }
+        };
+
+        let maker_levels: Vec<Decimal> = {
+            let book = match self.order_books.get(&order.symbol) {
+                Some(b) => b,
+                None => {
+                    let is_ioc_or_fok = order.time_in_force == "IOC" || order.time_in_force == "FOK";
+                    if is_ioc_or_fok {
+                        return PlaceOrderOutput {
+                            matches: Vec::new(),
+                            events: Vec::new(),
+                            remaining_quantity: order.quantity,
+                            filled_quantity: Decimal::ZERO,
+                            final_status: "EXPIRED".to_string(),
+                        };
+                    }
+                    self.add_order_to_book(order);
+                    return PlaceOrderOutput {
+                        matches: Vec::new(),
+                        events: Vec::new(),
+                        remaining_quantity: order.quantity,
+                        filled_quantity: Decimal::ZERO,
+                        final_status: "NEW".to_string(),
+                    };
+                }
+            };
+
+            let levels_map = match maker_side {
+                "SELL" => &book.asks,
+                "BUY" => &book.bids,
+                _ => return PlaceOrderOutput {
+                    matches: Vec::new(),
+                    events: Vec::new(),
+                    remaining_quantity: order.quantity,
+                    filled_quantity: Decimal::ZERO,
+                    final_status: "NEW".to_string(),
+                },
             };
 
             match taker_side.as_str() {
@@ -131,14 +221,36 @@ impl MatchingEngine {
                     .take_while(|p| **p >= taker_price)
                     .copied()
                     .collect(),
-                _ => return (matches, events),
+                _ => return PlaceOrderOutput {
+                    matches: Vec::new(),
+                    events: Vec::new(),
+                    remaining_quantity: order.quantity,
+                    filled_quantity: Decimal::ZERO,
+                    final_status: "NEW".to_string(),
+                },
             }
         };
 
+        self.execute_matches(order, &maker_levels, &taker_side, maker_side, false)
+    }
+
+    fn execute_matches(
+        &mut self,
+        order: &Order,
+        maker_levels: &[Decimal],
+        _taker_side: &str,
+        maker_side: &str,
+        is_market: bool,
+    ) -> PlaceOrderOutput {
+        let mut matches = Vec::new();
+        let mut events = Vec::new();
         let mut remaining = order.quantity - order.filled_quantity;
         let mut local_counter = self.match_counter;
 
-        for level_price in &maker_levels {
+        let is_ioc = order.time_in_force == "IOC";
+        let is_fok = order.time_in_force == "FOK";
+
+        for level_price in maker_levels {
             if remaining <= Decimal::ZERO {
                 break;
             }
@@ -243,35 +355,57 @@ impl MatchingEngine {
 
         self.match_counter = local_counter;
 
+        let filled_quantity = order.quantity - remaining;
+        let final_status = if is_fok && remaining > Decimal::ZERO {
+            matches.clear();
+            events.clear();
+            "EXPIRED".to_string()
+        } else if remaining <= Decimal::ZERO {
+            "FILLED".to_string()
+        } else if filled_quantity > Decimal::ZERO {
+            "PARTIALLY_FILLED".to_string()
+        } else {
+            "NEW".to_string()
+        };
+
         if remaining > Decimal::ZERO {
-            let updated_filled = order.quantity - remaining;
-            let new_status = if updated_filled > Decimal::ZERO {
-                "PARTIALLY_FILLED".to_string()
+            if is_market || is_ioc || is_fok {
+                self.event_producer.publish(&MatchingEvent::OrderCancelled {
+                    order_id: order.id,
+                    symbol: order.symbol.clone(),
+                    reason: "IMMEDIATE_OR_CANCEL".to_string(),
+                    timestamp: order.created_at,
+                });
             } else {
-                order.status.clone()
-            };
-            let updated_order = Order {
-                id: order.id,
-                user_id: order.user_id,
-                symbol: order.symbol.clone(),
-                side: order.side.clone(),
-                order_type: order.order_type.clone(),
-                price: order.price,
-                quantity: order.quantity,
-                filled_quantity: updated_filled,
-                status: new_status,
-                time_in_force: order.time_in_force.clone(),
-                client_order_id: order.client_order_id.clone(),
-                created_at: order.created_at,
-            };
-            self.add_order_to_book(&updated_order);
+                let updated_order = Order {
+                    id: order.id,
+                    user_id: order.user_id,
+                    symbol: order.symbol.clone(),
+                    side: order.side.clone(),
+                    order_type: order.order_type.clone(),
+                    price: order.price,
+                    quantity: order.quantity,
+                    filled_quantity,
+                    status: final_status.clone(),
+                    time_in_force: order.time_in_force.clone(),
+                    client_order_id: order.client_order_id.clone(),
+                    created_at: order.created_at,
+                };
+                self.add_order_to_book(&updated_order);
+            }
         }
 
         if let Some(book) = self.order_books.get_mut(&order.symbol) {
             book.sequence += 1;
         }
 
-        (matches, events)
+        PlaceOrderOutput {
+            matches,
+            events,
+            remaining_quantity: remaining,
+            filled_quantity,
+            final_status,
+        }
     }
 
     fn add_order_to_book(&mut self, order: &Order) {
@@ -327,6 +461,23 @@ mod tests {
         }
     }
 
+    fn create_market_order(id: Uuid, side: &str, qty: &str) -> Order {
+        Order {
+            id,
+            user_id: Uuid::new_v4(),
+            symbol: "BTCUSDT".to_string(),
+            side: side.to_string(),
+            order_type: "MARKET".to_string(),
+            price: None,
+            quantity: Decimal::from_str(qty).unwrap(),
+            filled_quantity: Decimal::ZERO,
+            status: "NEW".to_string(),
+            time_in_force: "GTC".to_string(),
+            client_order_id: None,
+            created_at: 1_000_000,
+        }
+    }
+
     #[test]
     fn test_basic_limit_match() {
         let mut engine = MatchingEngine::new();
@@ -336,12 +487,13 @@ mod tests {
         let sell_order = create_limit_order(sell_id, "SELL", "50000", "1");
         let buy_order = create_limit_order(buy_id, "BUY", "50000", "1");
 
-        engine.place_limit_order(&sell_order);
-        let (matches, _events) = engine.place_limit_order(&buy_order);
+        engine.place_order(&sell_order);
+        let output = engine.place_order(&buy_order);
 
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].price, Decimal::from_str("50000").unwrap());
-        assert_eq!(matches[0].quantity, Decimal::from_str("1").unwrap());
+        assert_eq!(output.matches.len(), 1);
+        assert_eq!(output.matches[0].price, Decimal::from_str("50000").unwrap());
+        assert_eq!(output.matches[0].quantity, Decimal::from_str("1").unwrap());
+        assert_eq!(output.final_status, "FILLED");
     }
 
     #[test]
@@ -353,11 +505,11 @@ mod tests {
         let sell_order = create_limit_order(sell_id, "SELL", "49900", "1");
         let buy_order = create_limit_order(buy_id, "BUY", "50000", "1");
 
-        engine.place_limit_order(&sell_order);
-        let (matches, _events) = engine.place_limit_order(&buy_order);
+        engine.place_order(&sell_order);
+        let output = engine.place_order(&buy_order);
 
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].price, Decimal::from_str("49900").unwrap());
+        assert_eq!(output.matches.len(), 1);
+        assert_eq!(output.matches[0].price, Decimal::from_str("49900").unwrap());
     }
 
     #[test]
@@ -369,11 +521,12 @@ mod tests {
         let sell_order = create_limit_order(sell_id, "SELL", "50000", "1");
         let buy_order = create_limit_order(buy_id, "BUY", "49900", "1");
 
-        engine.place_limit_order(&sell_order);
-        let (matches, events) = engine.place_limit_order(&buy_order);
+        engine.place_order(&sell_order);
+        let output = engine.place_order(&buy_order);
 
-        assert_eq!(matches.len(), 0);
-        assert!(events.is_empty());
+        assert_eq!(output.matches.len(), 0);
+        assert!(output.events.is_empty());
+        assert_eq!(output.final_status, "NEW");
     }
 
     #[test]
@@ -385,11 +538,12 @@ mod tests {
         let sell_order = create_limit_order(sell_id, "SELL", "50000", "0.5");
         let buy_order = create_limit_order(buy_id, "BUY", "50000", "1");
 
-        engine.place_limit_order(&sell_order);
-        let (matches, _events) = engine.place_limit_order(&buy_order);
+        engine.place_order(&sell_order);
+        let output = engine.place_order(&buy_order);
 
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].quantity, Decimal::from_str("0.5").unwrap());
+        assert_eq!(output.matches.len(), 1);
+        assert_eq!(output.matches[0].quantity, Decimal::from_str("0.5").unwrap());
+        assert_eq!(output.final_status, "PARTIALLY_FILLED");
 
         let state = engine.get_order_book_state("BTCUSDT").unwrap();
         assert_eq!(state.bids.len(), 1);
@@ -403,13 +557,12 @@ mod tests {
         let ask2 = Uuid::new_v4();
         let buy = Uuid::new_v4();
 
-        engine.place_limit_order(&create_limit_order(ask1, "SELL", "49900", "1"));
-        engine.place_limit_order(&create_limit_order(ask2, "SELL", "50000", "1"));
+        engine.place_order(&create_limit_order(ask1, "SELL", "49900", "1"));
+        engine.place_order(&create_limit_order(ask2, "SELL", "50000", "1"));
 
-        let (matches, _events) =
-            engine.place_limit_order(&create_limit_order(buy, "BUY", "50000", "1.5"));
-        assert_eq!(matches.len(), 2);
-        let total: Decimal = matches.iter().map(|m| m.quantity).sum();
+        let output = engine.place_order(&create_limit_order(buy, "BUY", "50000", "1.5"));
+        assert_eq!(output.matches.len(), 2);
+        let total: Decimal = output.matches.iter().map(|m| m.quantity).sum();
         assert_eq!(total, Decimal::from_str("1.5").unwrap());
     }
 
@@ -419,7 +572,7 @@ mod tests {
         let order_id = Uuid::new_v4();
         let order = create_limit_order(order_id, "BUY", "50000", "1");
 
-        engine.place_limit_order(&order);
+        engine.place_order(&order);
         let state = engine.get_order_book_state("BTCUSDT").unwrap();
         assert_eq!(state.bids.len(), 1);
 
@@ -438,9 +591,9 @@ mod tests {
     #[test]
     fn test_order_book_bid_ask_query() {
         let mut engine = MatchingEngine::new();
-        engine.place_limit_order(&create_limit_order(Uuid::new_v4(), "BUY", "50000", "1"));
-        engine.place_limit_order(&create_limit_order(Uuid::new_v4(), "BUY", "49900", "2"));
-        engine.place_limit_order(&create_limit_order(Uuid::new_v4(), "SELL", "50100", "1"));
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "BUY", "50000", "1"));
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "BUY", "49900", "2"));
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "SELL", "50100", "1"));
 
         let state = engine.get_order_book_state("BTCUSDT").unwrap();
         assert_eq!(state.bids.len(), 2);
@@ -448,5 +601,109 @@ mod tests {
         assert_eq!(state.bids[0].quantity, Decimal::from_str("1").unwrap());
         assert_eq!(state.asks.len(), 1);
         assert_eq!(state.asks[0].price, Decimal::from_str("50100").unwrap());
+    }
+
+    #[test]
+    fn test_market_order_buy() {
+        let mut engine = MatchingEngine::new();
+        let sell_id = Uuid::new_v4();
+        let buy_id = Uuid::new_v4();
+
+        engine.place_order(&create_limit_order(sell_id, "SELL", "50000", "1"));
+        let output = engine.place_order(&create_market_order(buy_id, "BUY", "1"));
+
+        assert_eq!(output.matches.len(), 1);
+        assert_eq!(output.final_status, "FILLED");
+        assert_eq!(output.filled_quantity, Decimal::from_str("1").unwrap());
+    }
+
+    #[test]
+    fn test_market_order_buy_multiple_levels() {
+        let mut engine = MatchingEngine::new();
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "SELL", "49900", "0.5"));
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "SELL", "50000", "0.5"));
+
+        let output = engine.place_order(&create_market_order(Uuid::new_v4(), "BUY", "1"));
+        assert_eq!(output.matches.len(), 2);
+        assert_eq!(output.final_status, "FILLED");
+    }
+
+    #[test]
+    fn test_market_order_sell() {
+        let mut engine = MatchingEngine::new();
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "BUY", "50000", "1"));
+
+        let output = engine.place_order(&create_market_order(Uuid::new_v4(), "SELL", "1"));
+        assert_eq!(output.matches.len(), 1);
+        assert_eq!(output.final_status, "FILLED");
+    }
+
+    #[test]
+    fn test_market_order_no_liquidity() {
+        let mut engine = MatchingEngine::new();
+        let output = engine.place_order(&create_market_order(Uuid::new_v4(), "BUY", "1"));
+        assert_eq!(output.matches.len(), 0);
+        assert_eq!(output.final_status, "EXPIRED");
+    }
+
+    #[test]
+    fn test_ioc_limit_partial_fill_does_not_rest_on_book() {
+        let mut engine = MatchingEngine::new();
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "SELL", "50000", "0.3"));
+
+        let buy_id = Uuid::new_v4();
+        let mut ioc_order = create_limit_order(buy_id, "BUY", "50000", "1");
+        ioc_order.time_in_force = "IOC".to_string();
+
+        let output = engine.place_order(&ioc_order);
+        assert_eq!(output.matches.len(), 1);
+        assert_eq!(output.final_status, "PARTIALLY_FILLED");
+
+        let state = engine.get_order_book_state("BTCUSDT").unwrap();
+        assert_eq!(state.bids.len(), 0);
+    }
+
+    #[test]
+    fn test_fok_fails_if_not_fully_filled() {
+        let mut engine = MatchingEngine::new();
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "SELL", "50000", "0.3"));
+
+        let buy_id = Uuid::new_v4();
+        let mut fok_order = create_limit_order(buy_id, "BUY", "50000", "1");
+        fok_order.time_in_force = "FOK".to_string();
+
+        let output = engine.place_order(&fok_order);
+        assert_eq!(output.matches.len(), 0);
+        assert_eq!(output.final_status, "EXPIRED");
+    }
+
+    #[test]
+    fn test_fok_succeeds_if_fully_filled() {
+        let mut engine = MatchingEngine::new();
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "SELL", "50000", "1"));
+
+        let buy_id = Uuid::new_v4();
+        let mut fok_order = create_limit_order(buy_id, "BUY", "50000", "1");
+        fok_order.time_in_force = "FOK".to_string();
+
+        let output = engine.place_order(&fok_order);
+        assert_eq!(output.matches.len(), 1);
+        assert_eq!(output.final_status, "FILLED");
+    }
+
+    #[test]
+    fn test_limit_ioc_no_match_does_not_rest() {
+        let mut engine = MatchingEngine::new();
+        engine.place_order(&create_limit_order(Uuid::new_v4(), "SELL", "50100", "1"));
+
+        let buy_id = Uuid::new_v4();
+        let mut ioc_order = create_limit_order(buy_id, "BUY", "50000", "1");
+        ioc_order.time_in_force = "IOC".to_string();
+
+        let output = engine.place_order(&ioc_order);
+        assert_eq!(output.matches.len(), 0);
+        assert_eq!(output.final_status, "NEW");
+        let state = engine.get_order_book_state("BTCUSDT").unwrap();
+        assert_eq!(state.bids.len(), 0);
     }
 }

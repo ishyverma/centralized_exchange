@@ -43,6 +43,12 @@ pub async fn place_order(
         )));
     }
 
+    if order_type == "MARKET" && body.price.is_some() {
+        return Err(OrderError(ApiError::ValidationError(
+            "Market order must not have a price".into(),
+        )));
+    }
+
     let time_in_force = body.time_in_force.to_uppercase();
     if !["GTC", "IOC", "FOK", "GTD"].contains(&time_in_force.as_str()) {
         return Err(OrderError(ApiError::ValidationError(
@@ -65,7 +71,7 @@ pub async fn place_order(
         })
         .await?;
 
-    let matches = engine
+    let (matches, final_status) = engine
         .process_order(&order_row)
         .await
         .map_err(|e| OrderError(ApiError::Internal(format!("Engine error: {}", e))))?;
@@ -96,17 +102,8 @@ pub async fn place_order(
         }
     }
 
-    let order_qty = order_row.quantity;
-    let taker_status = if taker_total_filled >= order_qty {
-        "FILLED"
-    } else if taker_total_filled > Decimal::ZERO {
-        "PARTIALLY_FILLED"
-    } else {
-        "NEW"
-    };
-
     if taker_total_filled > Decimal::ZERO {
-        db.update_order_status(order_row.id, taker_status, taker_total_filled)
+        db.update_order_status(order_row.id, &final_status, taker_total_filled)
             .await?;
     }
 
@@ -193,5 +190,56 @@ pub async fn all_orders(
         .await?;
 
     let response: Vec<OrderResponse> = orders.into_iter().map(OrderResponse::from).collect();
+    Ok(HttpResponse::Ok().json(response))
+}
+
+pub async fn get_depth(
+    engine: web::Data<EngineClient>,
+    query: web::Query<DepthParams>,
+) -> Result<HttpResponse, OrderError> {
+    let symbol = query.symbol.to_uppercase();
+
+    let state = engine.get_depth(&symbol);
+    match state {
+        Some(book_state) => {
+            let bids: Vec<Vec<String>> = book_state
+                .bids
+                .iter()
+                .map(|l| vec![l.price.to_string(), l.quantity.to_string()])
+                .collect();
+            let asks: Vec<Vec<String>> = book_state
+                .asks
+                .iter()
+                .map(|l| vec![l.price.to_string(), l.quantity.to_string()])
+                .collect();
+
+            Ok(HttpResponse::Ok().json(DepthResponse {
+                last_update_id: book_state.sequence,
+                bids,
+                asks,
+            }))
+        }
+        None => Ok(HttpResponse::Ok().json(DepthResponse {
+            last_update_id: 0,
+            bids: Vec::new(),
+            asks: Vec::new(),
+        })),
+    }
+}
+
+pub async fn my_trades(
+    db: web::Data<DbPool>,
+    user_id: web::ReqData<Uuid>,
+    query: web::Query<MyTradesParams>,
+) -> Result<HttpResponse, OrderError> {
+    let uid = *user_id;
+    let limit = query.limit.unwrap_or(500).min(1000);
+    let offset = query.offset.unwrap_or(0);
+
+    let trades = db
+        .list_user_trades(uid, query.symbol.as_deref(), limit, offset)
+        .await?;
+
+    let response: Vec<TradeResponse> = trades.into_iter().map(TradeResponse::from).collect();
     Ok(HttpResponse::Ok().json(response))
 }

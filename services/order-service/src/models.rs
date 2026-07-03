@@ -40,6 +40,26 @@ pub struct AllOrdersParams {
     pub offset: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct DepthParams {
+    pub symbol: String,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DepthResponse {
+    pub last_update_id: u64,
+    pub bids: Vec<Vec<String>>,
+    pub asks: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MyTradesParams {
+    pub symbol: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct OrderResponse {
     pub symbol: String,
@@ -54,6 +74,18 @@ pub struct OrderResponse {
     pub order_type: String,
     pub side: String,
     pub transact_time: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TradeResponse {
+    pub id: i64,
+    pub symbol: String,
+    pub price: String,
+    pub qty: String,
+    pub quote_qty: String,
+    pub order_id: Uuid,
+    pub is_buyer: bool,
+    pub time: u64,
 }
 
 impl From<super::db::OrderRow> for OrderResponse {
@@ -72,6 +104,21 @@ impl From<super::db::OrderRow> for OrderResponse {
             order_type: row.order_type,
             side: row.side,
             transact_time: row.created_at.timestamp_millis() as u64,
+        }
+    }
+}
+
+impl From<super::db::TradeRow> for TradeResponse {
+    fn from(row: super::db::TradeRow) -> Self {
+        Self {
+            id: row.id,
+            symbol: row.symbol,
+            price: row.price.to_string(),
+            qty: row.quantity.to_string(),
+            quote_qty: row.quote_quantity.to_string(),
+            order_id: row.buyer_order_id,
+            is_buyer: true,
+            time: row.trade_time.timestamp_millis() as u64,
         }
     }
 }

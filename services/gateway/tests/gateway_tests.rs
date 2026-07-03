@@ -10,6 +10,8 @@ macro_rules! setup_app {
     () => {{
         let auth_service_url = "http://localhost:9999".to_string();
         let order_service_url = "http://localhost:9998".to_string();
+        let wallet_service_url = "http://localhost:9997".to_string();
+        let market_data_service_url = "http://localhost:9996".to_string();
         test::init_service(
             App::new()
                 .wrap(RateLimiter::new(None, 6000, 60, 10))
@@ -18,6 +20,8 @@ macro_rules! setup_app {
                 .wrap(Cors::permissive())
                 .app_data(web::Data::new(auth_service_url))
                 .app_data(web::Data::new(order_service_url))
+                .app_data(web::Data::new(wallet_service_url))
+                .app_data(web::Data::new(market_data_service_url))
                 .route("/api/v3/ping", web::get().to(api_gateway::ping))
                 .route("/api/v3/time", web::get().to(api_gateway::server_time))
                 .route(
@@ -31,6 +35,34 @@ macro_rules! setup_app {
                 .route(
                     "/api/v3/allOrders",
                     web::route().to(api_gateway::proxy_to_order),
+                )
+                .route(
+                    "/api/v3/myTrades",
+                    web::route().to(api_gateway::proxy_to_order),
+                )
+                .route(
+                    "/api/v3/depth",
+                    web::route().to(api_gateway::proxy_to_order),
+                )
+                .route(
+                    "/api/v3/account",
+                    web::route().to(api_gateway::proxy_to_wallet),
+                )
+                .route(
+                    "/api/v3/balance",
+                    web::route().to(api_gateway::proxy_to_wallet),
+                )
+                .route(
+                    "/api/v3/exchangeInfo",
+                    web::route().to(api_gateway::proxy_to_market_data),
+                )
+                .route(
+                    "/api/v3/trades",
+                    web::route().to(api_gateway::proxy_to_market_data),
+                )
+                .route(
+                    "/api/v3/ticker/{tail:.*}",
+                    web::route().to(api_gateway::proxy_to_market_data),
                 )
                 .default_service(web::route().to(api_gateway::not_found)),
         )

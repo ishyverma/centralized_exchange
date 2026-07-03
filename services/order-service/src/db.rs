@@ -144,6 +144,38 @@ impl DbPool {
         }
     }
 
+    pub async fn list_user_trades(
+        &self,
+        user_id: Uuid,
+        symbol: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<TradeRow>, sqlx::Error> {
+        match symbol {
+            Some(sym) => {
+                sqlx::query_as::<_, TradeRow>(
+                    "SELECT id, symbol, price, quantity, quote_quantity, buyer_order_id, seller_order_id, buyer_user_id, seller_user_id, taker_side, trade_time, match_id FROM trades WHERE (buyer_user_id = $1 OR seller_user_id = $1) AND symbol = $2 ORDER BY trade_time DESC LIMIT $3 OFFSET $4",
+                )
+                .bind(user_id)
+                .bind(sym)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.pool)
+                .await
+            }
+            None => {
+                sqlx::query_as::<_, TradeRow>(
+                    "SELECT id, symbol, price, quantity, quote_quantity, buyer_order_id, seller_order_id, buyer_user_id, seller_user_id, taker_side, trade_time, match_id FROM trades WHERE buyer_user_id = $1 OR seller_user_id = $1 ORDER BY trade_time DESC LIMIT $2 OFFSET $3",
+                )
+                .bind(user_id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.pool)
+                .await
+            }
+        }
+    }
+
     pub async fn update_order_status(
         &self,
         order_id: Uuid,

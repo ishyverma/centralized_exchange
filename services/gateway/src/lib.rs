@@ -94,6 +94,22 @@ pub async fn proxy_to_order(
     proxy_request(req, body, order_service_url.get_ref()).await
 }
 
+pub async fn proxy_to_wallet(
+    req: HttpRequest,
+    body: web::Bytes,
+    wallet_service_url: web::Data<String>,
+) -> HttpResponse {
+    proxy_request(req, body, wallet_service_url.get_ref()).await
+}
+
+pub async fn proxy_to_market_data(
+    req: HttpRequest,
+    body: web::Bytes,
+    market_data_service_url: web::Data<String>,
+) -> HttpResponse {
+    proxy_request(req, body, market_data_service_url.get_ref()).await
+}
+
 pub async fn not_found() -> HttpResponse {
     HttpResponse::NotFound().json(serde_json::json!({
         "code": -2002,

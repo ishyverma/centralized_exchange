@@ -6,4 +6,6 @@ members = [
     "services/gateway",
     "services/order-service",
     "services/matching-engine",
+    "services/wallet-service",
+    "services/market-data-service",
 ]
