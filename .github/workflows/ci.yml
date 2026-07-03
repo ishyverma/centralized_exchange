@@ -51,7 +51,9 @@ jobs:
 
       - name: Run SQL migrations
         run: |
-          psql -h localhost -U backpack -d backpack -f sql/0001_init.sql
+          for f in sql/*.sql; do
+            psql -h localhost -U backpack -d backpack -f "$f"
+          done
         env:
           PGPASSWORD: backpack_dev
 

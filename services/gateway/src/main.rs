@@ -33,14 +33,16 @@ async fn main() -> anyhow::Result<()> {
     let window_secs = config.rate_limit_weight_window;
     let order_rate = config.order_rate_limit_per_sec;
     let auth_service_url = config.auth_service_url.clone();
+    let order_service_url = config.order_service_url.clone();
     let host = config.host.clone();
     let port = config.port;
 
     tracing::info!(
-        "API Gateway starting on {}:{}, auth backend: {}",
+        "API Gateway starting on {}:{}, auth backend: {}, order backend: {}",
         host,
         port,
-        auth_service_url
+        auth_service_url,
+        order_service_url
     );
 
     HttpServer::new(move || {
@@ -61,11 +63,20 @@ async fn main() -> anyhow::Result<()> {
             .wrap(Logger::default())
             .wrap(cors)
             .app_data(web::Data::new(auth_service_url.clone()))
+            .app_data(web::Data::new(order_service_url.clone()))
             .route("/api/v3/ping", web::get().to(api_gateway::ping))
             .route("/api/v3/time", web::get().to(api_gateway::server_time))
             .route(
                 "/api/v3/auth/{tail:.*}",
                 web::route().to(api_gateway::proxy_to_auth),
+            )
+            .route(
+                "/api/v3/order",
+                web::route().to(api_gateway::proxy_to_order),
+            )
+            .route(
+                "/api/v3/allOrders",
+                web::route().to(api_gateway::proxy_to_order),
             )
             .default_service(web::route().to(api_gateway::not_found))
     })

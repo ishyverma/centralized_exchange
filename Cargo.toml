@@ -4,4 +4,6 @@ members = [
     "common",
     "services/auth",
     "services/gateway",
+    "services/order-service",
+    "services/matching-engine",
 ]

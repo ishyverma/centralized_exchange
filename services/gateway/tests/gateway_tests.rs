@@ -9,6 +9,7 @@ const TEST_JWT_SECRET: &str = "test-jwt-secret-for-testing";
 macro_rules! setup_app {
     () => {{
         let auth_service_url = "http://localhost:9999".to_string();
+        let order_service_url = "http://localhost:9998".to_string();
         test::init_service(
             App::new()
                 .wrap(RateLimiter::new(None, 6000, 60, 10))
@@ -16,11 +17,20 @@ macro_rules! setup_app {
                 .wrap(Logger::default())
                 .wrap(Cors::permissive())
                 .app_data(web::Data::new(auth_service_url))
+                .app_data(web::Data::new(order_service_url))
                 .route("/api/v3/ping", web::get().to(api_gateway::ping))
                 .route("/api/v3/time", web::get().to(api_gateway::server_time))
                 .route(
                     "/api/v3/auth/{tail:.*}",
                     web::route().to(api_gateway::proxy_to_auth),
+                )
+                .route(
+                    "/api/v3/order",
+                    web::route().to(api_gateway::proxy_to_order),
+                )
+                .route(
+                    "/api/v3/allOrders",
+                    web::route().to(api_gateway::proxy_to_order),
                 )
                 .default_service(web::route().to(api_gateway::not_found)),
         )
@@ -196,9 +206,56 @@ async fn test_proxy_forwards_auth_header() {
 }
 
 #[actix_web::test]
+async fn test_order_proxy_returns_bad_gateway() {
+    let app = setup_app!();
+    let token = generate_jwt(
+        TEST_JWT_SECRET,
+        "550e8400-e29b-41d4-a716-446655440000",
+        "test@example.com",
+        3600,
+    );
+
+    let req = test::TestRequest::get()
+        .uri("/api/v3/order?orderId=550e8400-e29b-41d4-a716-446655440000")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    // Should reach order service proxy → returns 502 (backend down) not 401 (auth rejected)
+    assert_ne!(resp.status(), 401);
+    assert_eq!(resp.status(), 502);
+}
+
+#[actix_web::test]
 async fn test_missing_auth_header() {
     let app = setup_app!();
     let req = test::TestRequest::get().uri("/api/v3/order").to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn test_order_proxy_accepts_valid_jwt() {
+    let app = setup_app!();
+    let token = generate_jwt(
+        TEST_JWT_SECRET,
+        "550e8400-e29b-41d4-a716-446655440000",
+        "test@example.com",
+        3600,
+    );
+
+    let req = test::TestRequest::post()
+        .uri("/api/v3/order")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .set_json(json!({
+            "symbol": "BTCUSDT",
+            "side": "BUY",
+            "type": "LIMIT",
+            "quantity": "0.01",
+            "price": "50000",
+            "timeInForce": "GTC"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_ne!(resp.status(), 401);
+    assert_eq!(resp.status(), 502);
 }

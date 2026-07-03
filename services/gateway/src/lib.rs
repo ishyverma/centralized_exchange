@@ -5,30 +5,14 @@ use actix_web::{web, HttpRequest, HttpResponse};
 
 pub type RedisConn = redis::aio::ConnectionManager;
 
-pub async fn ping() -> HttpResponse {
-    HttpResponse::Ok().json(serde_json::json!({}))
-}
-
-pub async fn server_time() -> HttpResponse {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64;
-    HttpResponse::Ok().json(serde_json::json!({ "serverTime": now }))
-}
-
-pub async fn proxy_to_auth(
-    req: HttpRequest,
-    body: web::Bytes,
-    auth_service_url: web::Data<String>,
-) -> HttpResponse {
+async fn proxy_request(req: HttpRequest, body: web::Bytes, base_url: &str) -> HttpResponse {
     let path = req.path();
     let query = req.query_string();
     let method = req.method().clone();
 
     let url = format!(
         "{}{}{}",
-        auth_service_url.get_ref(),
+        base_url,
         path,
         if query.is_empty() {
             String::new()
@@ -80,6 +64,34 @@ pub async fn proxy_to_auth(
             "msg": format!("Upstream service error: {}", e)
         })),
     }
+}
+
+pub async fn ping() -> HttpResponse {
+    HttpResponse::Ok().json(serde_json::json!({}))
+}
+
+pub async fn server_time() -> HttpResponse {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    HttpResponse::Ok().json(serde_json::json!({ "serverTime": now }))
+}
+
+pub async fn proxy_to_auth(
+    req: HttpRequest,
+    body: web::Bytes,
+    auth_service_url: web::Data<String>,
+) -> HttpResponse {
+    proxy_request(req, body, auth_service_url.get_ref()).await
+}
+
+pub async fn proxy_to_order(
+    req: HttpRequest,
+    body: web::Bytes,
+    order_service_url: web::Data<String>,
+) -> HttpResponse {
+    proxy_request(req, body, order_service_url.get_ref()).await
 }
 
 pub async fn not_found() -> HttpResponse {
