@@ -29,6 +29,15 @@ pub struct LevelSnapshot {
     pub quantity: Decimal,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BookTicker {
+    pub symbol: String,
+    pub bid_price: Decimal,
+    pub bid_qty: Decimal,
+    pub ask_price: Decimal,
+    pub ask_qty: Decimal,
+}
+
 #[derive(Debug)]
 pub struct PlaceOrderOutput {
     pub matches: Vec<MatchResult>,
@@ -461,6 +470,23 @@ impl MatchingEngine {
     fn add_order_to_book(&mut self, order: &Order) {
         let book = self.get_or_create_order_book(&order.symbol);
         book.add_order(order);
+    }
+
+    pub fn get_book_ticker(&self, symbol: &str) -> Option<BookTicker> {
+        let book = self.order_books.get(symbol)?;
+        let best_bid = book.get_best_bid();
+        let best_ask = book.get_best_ask();
+        Some(BookTicker {
+            symbol: symbol.to_string(),
+            bid_price: best_bid.map(|(p, _)| *p).unwrap_or(Decimal::ZERO),
+            bid_qty: best_bid
+                .map(|(_, l)| l.total_quantity())
+                .unwrap_or(Decimal::ZERO),
+            ask_price: best_ask.map(|(p, _)| *p).unwrap_or(Decimal::ZERO),
+            ask_qty: best_ask
+                .map(|(_, l)| l.total_quantity())
+                .unwrap_or(Decimal::ZERO),
+        })
     }
 
     pub fn cancel_order(

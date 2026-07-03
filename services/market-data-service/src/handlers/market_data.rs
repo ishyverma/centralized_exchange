@@ -106,6 +106,69 @@ pub async fn get_ticker_24hr(
     }))
 }
 
+pub async fn get_historical_trades(
+    db: web::Data<DbPool>,
+    query: web::Query<HistoricalTradesQueryParams>,
+) -> Result<HttpResponse, MarketDataError> {
+    let symbol = query.symbol.to_uppercase();
+    let limit = query.limit.unwrap_or(500).min(1000);
+    let trades = db
+        .get_historical_trades(&symbol, limit, query.from_id)
+        .await?;
+    let response: Vec<TradeResponse> = trades.into_iter().map(TradeResponse::from).collect();
+    Ok(HttpResponse::Ok().json(response))
+}
+
+pub async fn get_klines(
+    db: web::Data<DbPool>,
+    query: web::Query<KlineQueryParams>,
+) -> Result<HttpResponse, MarketDataError> {
+    let symbol = query.symbol.to_uppercase();
+    let limit = query.limit.unwrap_or(500).min(1000);
+    let klines = db
+        .get_klines(
+            &symbol,
+            &query.interval,
+            query.start_time,
+            query.end_time,
+            limit,
+        )
+        .await?;
+    let response: Vec<Vec<serde_json::Value>> = klines
+        .iter()
+        .map(|k| {
+            let open_time = k.bucket_start as i64;
+            let close_time = open_time
+                + match query.interval.as_str() {
+                    "1m" => 60000,
+                    "5m" => 300000,
+                    "15m" => 900000,
+                    "1h" => 3600000,
+                    "4h" => 14400000,
+                    "1d" => 86400000,
+                    "1w" => 604800000,
+                    "1M" => 2592000000,
+                    _ => 60000,
+                };
+            vec![
+                serde_json::json!(open_time),
+                serde_json::json!(k.open.to_string()),
+                serde_json::json!(k.high.to_string()),
+                serde_json::json!(k.low.to_string()),
+                serde_json::json!(k.close.to_string()),
+                serde_json::json!(k.volume.to_string()),
+                serde_json::json!(close_time),
+                serde_json::json!(k.quote_volume.to_string()),
+                serde_json::json!(k.trade_count),
+                serde_json::json!(k.volume.to_string()),
+                serde_json::json!(k.quote_volume.to_string()),
+                serde_json::json!("0"),
+            ]
+        })
+        .collect();
+    Ok(HttpResponse::Ok().json(response))
+}
+
 pub async fn get_ticker_price(
     db: web::Data<DbPool>,
     query: web::Query<TickerQueryParams>,

@@ -7,6 +7,22 @@ pub struct TradesQueryParams {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct HistoricalTradesQueryParams {
+    pub symbol: String,
+    pub limit: Option<i64>,
+    pub from_id: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct KlineQueryParams {
+    pub symbol: String,
+    pub interval: String,
+    pub limit: Option<i64>,
+    pub start_time: Option<i64>,
+    pub end_time: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct DepthQueryParams {
     pub symbol: String,
     pub limit: Option<i64>,
@@ -68,6 +84,15 @@ pub struct SymbolInfo {
     pub quote_asset: String,
     pub order_types: Vec<String>,
     pub is_spot_trading_allowed: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BookTickerResponse {
+    pub symbol: String,
+    pub bid_price: String,
+    pub bid_qty: String,
+    pub ask_price: String,
+    pub ask_qty: String,
 }
 
 impl From<crate::db::TradeRow> for TradeResponse {

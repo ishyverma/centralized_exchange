@@ -109,7 +109,23 @@ async fn main() -> anyhow::Result<()> {
                 web::route().to(api_gateway::proxy_to_market_data),
             )
             .route(
-                "/api/v3/ticker/{tail:.*}",
+                "/api/v3/ticker/24hr",
+                web::route().to(api_gateway::proxy_to_market_data),
+            )
+            .route(
+                "/api/v3/ticker/price",
+                web::route().to(api_gateway::proxy_to_market_data),
+            )
+            .route(
+                "/api/v3/ticker/bookTicker",
+                web::route().to(api_gateway::proxy_to_order),
+            )
+            .route(
+                "/api/v3/klines",
+                web::route().to(api_gateway::proxy_to_market_data),
+            )
+            .route(
+                "/api/v3/historicalTrades",
                 web::route().to(api_gateway::proxy_to_market_data),
             )
             .default_service(web::route().to(api_gateway::not_found))

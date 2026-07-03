@@ -225,6 +225,30 @@ pub async fn get_depth(
     }
 }
 
+pub async fn get_book_ticker(
+    engine: web::Data<EngineClient>,
+    query: web::Query<BookTickerQueryParams>,
+) -> Result<HttpResponse, OrderError> {
+    let symbol = query.symbol.as_deref().unwrap_or("BTCUSDT").to_uppercase();
+    let ticker = engine.get_book_ticker(&symbol);
+    match ticker {
+        Some(t) => Ok(HttpResponse::Ok().json(BookTickerResponse {
+            symbol: t.symbol,
+            bid_price: t.bid_price.to_string(),
+            bid_qty: t.bid_qty.to_string(),
+            ask_price: t.ask_price.to_string(),
+            ask_qty: t.ask_qty.to_string(),
+        })),
+        None => Ok(HttpResponse::Ok().json(BookTickerResponse {
+            symbol,
+            bid_price: "0".to_string(),
+            bid_qty: "0".to_string(),
+            ask_price: "0".to_string(),
+            ask_qty: "0".to_string(),
+        })),
+    }
+}
+
 pub async fn my_trades(
     db: web::Data<DbPool>,
     user_id: web::ReqData<Uuid>,

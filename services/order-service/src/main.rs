@@ -23,7 +23,11 @@ async fn main() -> anyhow::Result<()> {
     let port = config.port;
 
     let jwt_secret = config.jwt_secret.clone();
-    let public_prefixes = vec!["/api/v3/depth".to_string()];
+    let public_prefixes = vec![
+        "/api/v3/depth".to_string(),
+        "/api/v3/ticker/bookTicker".to_string(),
+        "/ws".to_string(),
+    ];
 
     tracing::info!("Order Service starting on {}:{}", host, port);
 
@@ -61,7 +65,15 @@ async fn main() -> anyhow::Result<()> {
                     .route(
                         "/depth",
                         web::get().to(order_service::handlers::orders::get_depth),
+                    )
+                    .route(
+                        "/ticker/bookTicker",
+                        web::get().to(order_service::handlers::orders::get_book_ticker),
                     ),
+            )
+            .route(
+                "/ws",
+                web::get().to(order_service::handlers::ws::ws_handler),
             )
     })
     .bind(format!("{}:{}", host, port))?

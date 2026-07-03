@@ -41,6 +41,20 @@ pub struct AllOrdersParams {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct BookTickerQueryParams {
+    pub symbol: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BookTickerResponse {
+    pub symbol: String,
+    pub bid_price: String,
+    pub bid_qty: String,
+    pub ask_price: String,
+    pub ask_qty: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct DepthParams {
     pub symbol: String,
     pub limit: Option<i64>,

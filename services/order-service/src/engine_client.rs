@@ -138,4 +138,11 @@ impl EngineClient {
         }
         None
     }
+
+    pub fn get_book_ticker(&self, symbol: &str) -> Option<matching_engine::engine::BookTicker> {
+        if let Ok(engine) = self.engine.lock() {
+            return engine.get_book_ticker(symbol);
+        }
+        None
+    }
 }

@@ -29,6 +29,8 @@ async fn main() -> anyhow::Result<()> {
     let public_prefixes = vec![
         "/api/v3/exchangeInfo".to_string(),
         "/api/v3/trades".to_string(),
+        "/api/v3/historicalTrades".to_string(),
+        "/api/v3/klines".to_string(),
         "/api/v3/ticker".to_string(),
     ];
 
@@ -52,6 +54,15 @@ async fn main() -> anyhow::Result<()> {
                         "/trades",
                         web::get()
                             .to(market_data_service::handlers::market_data::get_recent_trades),
+                    )
+                    .route(
+                        "/historicalTrades",
+                        web::get()
+                            .to(market_data_service::handlers::market_data::get_historical_trades),
+                    )
+                    .route(
+                        "/klines",
+                        web::get().to(market_data_service::handlers::market_data::get_klines),
                     )
                     .route(
                         "/ticker/24hr",
