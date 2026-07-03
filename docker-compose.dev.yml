@@ -1,0 +1,102 @@
+services:
+  postgres:
+    extends:
+      file: docker-compose.yml
+      service: postgres
+
+  redis:
+    extends:
+      file: docker-compose.yml
+      service: redis
+
+  zookeeper:
+    extends:
+      file: docker-compose.yml
+      service: zookeeper
+
+  kafka:
+    extends:
+      file: docker-compose.yml
+      service: kafka
+
+  auth-service:
+    build:
+      context: .
+      args:
+        SERVICE: auth-service
+    ports:
+      - "8081:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://backpack:backpack_dev@postgres:5432/backpack
+      JWT_SECRET: backpack-dev-jwt-secret-change-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway:
+    build:
+      context: .
+      args:
+        SERVICE: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      AUTH_SERVICE_URL: http://auth-service:8080
+      ORDER_SERVICE_URL: http://order-service:8080
+      WALLET_SERVICE_URL: http://wallet-service:8080
+      MARKET_DATA_SERVICE_URL: http://market-data-service:8080
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: backpack-dev-jwt-secret-change-in-production
+    depends_on:
+      - auth-service
+      - order-service
+      - wallet-service
+      - market-data-service
+
+  order-service:
+    build:
+      context: .
+      args:
+        SERVICE: order-service
+    ports:
+      - "8082:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://backpack:backpack_dev@postgres:5432/backpack
+      JWT_SECRET: backpack-dev-jwt-secret-change-in-production
+      WALLET_SERVICE_URL: http://wallet-service:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  wallet-service:
+    build:
+      context: .
+      args:
+        SERVICE: wallet-service
+    ports:
+      - "8083:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://backpack:backpack_dev@postgres:5432/backpack
+      JWT_SECRET: backpack-dev-jwt-secret-change-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  market-data-service:
+    build:
+      context: .
+      args:
+        SERVICE: market-data-service
+    ports:
+      - "8084:8080"
+    environment:
+      MARKET_DATA_SERVICE_PORT: "8080"
+      DATABASE_URL: postgres://backpack:backpack_dev@postgres:5432/backpack
+      JWT_SECRET: backpack-dev-jwt-secret-change-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy

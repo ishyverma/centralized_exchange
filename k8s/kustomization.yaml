@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: backpack-exchange
+
+commonLabels:
+  app.kubernetes.io/part-of: backpack-exchange
+
+resources:
+  - base/namespace.yaml
+  - secrets.yaml
+  - infra/postgres-init-configmap.yaml
+  - infra/postgres-statefulset.yaml
+  - infra/redis-deployment.yaml
+  - services/auth-deployment.yaml
+  - services/gateway-deployment.yaml
+  - services/order-deployment.yaml
+  - services/wallet-deployment.yaml
+  - services/market-data-deployment.yaml

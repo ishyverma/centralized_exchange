@@ -1,0 +1,186 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-sql
+data:
+  000_init.sql: |
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    CREATE TABLE users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        totp_secret VARCHAR(255),
+        status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+    );
+
+    CREATE TABLE api_keys (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id),
+        api_key VARCHAR(64) UNIQUE NOT NULL,
+        api_secret_hash VARCHAR(255) NOT NULL,
+        permissions VARCHAR[] NOT NULL DEFAULT '{}',
+        ip_whitelist INET[],
+        status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+        last_used_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        expires_at TIMESTAMP WITH TIME ZONE
+    );
+
+    CREATE TABLE orders (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id),
+        symbol VARCHAR(20) NOT NULL,
+        side VARCHAR(4) NOT NULL,
+        order_type VARCHAR(20) NOT NULL,
+        price NUMERIC(20,8),
+        quantity NUMERIC(20,8) NOT NULL,
+        filled_quantity NUMERIC(20,8) NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'NEW',
+        time_in_force VARCHAR(3) NOT NULL DEFAULT 'GTC',
+        client_order_id VARCHAR(64),
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE trades (
+        id BIGSERIAL PRIMARY KEY,
+        symbol VARCHAR(20) NOT NULL,
+        price NUMERIC(20,8) NOT NULL,
+        quantity NUMERIC(20,8) NOT NULL,
+        quote_quantity NUMERIC(20,8) NOT NULL,
+        buyer_order_id UUID NOT NULL,
+        seller_order_id UUID NOT NULL,
+        buyer_user_id UUID NOT NULL,
+        seller_user_id UUID NOT NULL,
+        taker_side VARCHAR(4) NOT NULL,
+        trade_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        match_id BIGINT NOT NULL
+    );
+
+    CREATE INDEX idx_users_email ON users(email);
+    CREATE INDEX idx_orders_user_id ON orders(user_id);
+    CREATE INDEX idx_orders_symbol_status ON orders(symbol, status);
+    CREATE INDEX idx_trades_symbol_time ON trades(symbol, trade_time);
+
+    CREATE TABLE balances (
+        user_id UUID NOT NULL REFERENCES users(id),
+        asset VARCHAR(20) NOT NULL,
+        total NUMERIC(20,8) NOT NULL DEFAULT 0,
+        available NUMERIC(20,8) NOT NULL DEFAULT 0,
+        reserved NUMERIC(20,8) NOT NULL DEFAULT 0,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, asset)
+    );
+
+    CREATE TABLE balance_events (
+        id BIGSERIAL PRIMARY KEY,
+        user_id UUID NOT NULL,
+        asset VARCHAR(20) NOT NULL,
+        event_type VARCHAR(20) NOT NULL,
+        amount NUMERIC(20,8) NOT NULL,
+        balance_before_total NUMERIC(20,8) NOT NULL,
+        balance_after_total NUMERIC(20,8) NOT NULL,
+        reference_id UUID,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE deposits (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id),
+        asset VARCHAR(20) NOT NULL,
+        amount NUMERIC(20,8) NOT NULL,
+        tx_hash VARCHAR(255) UNIQUE NOT NULL,
+        confirmations INT NOT NULL DEFAULT 0,
+        required_confirmations INT NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+        detected_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE withdrawals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id),
+        asset VARCHAR(20) NOT NULL,
+        amount NUMERIC(20,8) NOT NULL,
+        fee NUMERIC(20,8) NOT NULL DEFAULT 0,
+        address VARCHAR(255) NOT NULL,
+        tx_hash VARCHAR(255),
+        status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+        requested_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+
+    INSERT INTO balances (user_id, asset, total, available, reserved)
+    SELECT id, 'USDT', 1000000, 1000000, 0 FROM users
+    ON CONFLICT DO NOTHING;
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          ports:
+            - containerPort: {{ .Values.postgres.port }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.user }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.database }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backpack-secrets
+                  key: postgres_password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "{{ .Values.postgres.user }}"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "{{ .Values.postgres.user }}"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources: {{ toYaml .Values.postgres.resources | nindent 12 }}
+      volumes:
+        - name: init-sql
+          configMap:
+            name: postgres-init-sql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storageSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - port: {{ .Values.postgres.port }}
+      targetPort: {{ .Values.postgres.port }}
+      name: postgres
+  type: ClusterIP
